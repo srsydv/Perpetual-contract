@@ -15,13 +15,13 @@ contract PerpetualExchange {
 
     uint256 public constant PRICE_DECIMALS = 8;
     uint256 public constant MARGIN_DECIMALS = 18;
-    uint256 public constant MAINTENANCE_MARGIN_BPS = 500; // 5%
+    uint256 public constant MAINTENANCE_MARGIN_BPS = 500; 
     uint256 public constant MAX_LEVERAGE = 20;
 
     struct Position {
-        int256 size;           // in 18 decimals, + long, - short (in base units)
-        uint256 entryPrice;    // 8 decimals from Chainlink
-        uint256 margin;        // 18 decimals (wei)
+        int256 size;           
+        uint256 entryPrice;    
+        uint256 margin;        
         uint256 lastUpdatedAt;
     }
 
@@ -120,10 +120,246 @@ contract PerpetualExchange {
         pos.margin = totalMargin;
         pos.lastUpdatedAt = block.timestamp;
 
-        
+        if (_notional(pos) * MAX_LEVERAGE < totalMargin * (10 ** MARGIN_DECIMALS)) revert ExceedsMaxLeverage();
+
         emit PositionOpened(msg.sender, isLong, sizeAbs, price, marginAmount);
     }
-    
+
+    function closePosition(uint256 sizeToClose) external {
+        Position storage pos = positions[msg.sender];
+        if (pos.size == 0) revert NoPosition();
+        uint256 sizeAbs = _abs(pos.size);
+        if (sizeToClose == 0 || sizeToClose > sizeAbs) revert ZeroSize();
+
+        uint256 exitPrice = getMarkPrice();
+        int256 pnl = _pnl(pos.size, pos.entryPrice, exitPrice, sizeToClose);
+        uint256 marginToReturn = (pos.margin * sizeToClose) / sizeAbs;
+        uint256 totalPayout = marginToReturn + (pnl >= 0 ? uint256(pnl) : 0);
+        if (pnl < 0) {
+            uint256 loss = uint256(-pnl);
+            if (loss > marginToReturn) totalPayout = 0;
+            else totalPayout = marginToReturn - loss;
+        }
+
+        pos.margin -= marginToReturn;
+        if (sizeToClose == sizeAbs) {
+            pos.size = 0;
+            pos.entryPrice = 0;
+            pos.lastUpdatedAt = 0;
+            _removePositionHolder(msg.sender);
+        } else {
+            pos.size = pos.size > 0 ? int256(sizeAbs - sizeToClose) : -int256(sizeAbs - sizeToClose);
+            pos.lastUpdatedAt = block.timestamp;
+        }
+
+        emit PositionClosed(msg.sender, sizeToClose, exitPrice, pnl);
+        if (!collateralToken.transfer(msg.sender, totalPayout)) revert TransferFailed();
+    }
+
+    function addMargin(uint256 amount) external {
+        if (amount == 0) revert ZeroMargin();
+        Position storage pos = positions[msg.sender];
+        if (pos.size == 0) revert NoPosition();
+        if (!collateralToken.transferFrom(msg.sender, address(this), amount)) revert TransferFailed();
+        pos.margin += amount;
+        pos.lastUpdatedAt = block.timestamp;
+        emit MarginAdded(msg.sender, amount);
+    }
+
+    function removeMargin(uint256 amount) external {
+        Position storage pos = positions[msg.sender];
+        if (pos.size == 0) revert NoPosition();
+        pos.margin -= amount;
+        pos.lastUpdatedAt = block.timestamp;
+        if (_marginRatio(pos) < MAINTENANCE_MARGIN_BPS) revert InsufficientMargin();
+        emit MarginRemoved(msg.sender, amount);
+        if (!collateralToken.transfer(msg.sender, amount)) revert TransferFailed();
+    }
+
+    /**
+     * @notice Liquidate a position that is below maintenance margin.
+     */
+    function liquidate(address trader) external {
+        Position storage pos = positions[trader];
+        if (pos.size == 0) revert NoPosition();
+        if (_marginRatio(pos) >= MAINTENANCE_MARGIN_BPS) revert PositionNotLiquidatable();
+
+        uint256 price = getMarkPrice();
+        uint256 sizeAbs = _abs(pos.size);
+        pos.size = 0;
+        pos.entryPrice = 0;
+        uint256 marginForLiquidator = pos.margin;
+        pos.margin = 0;
+        pos.lastUpdatedAt = 0;
+        _removePositionHolder(trader);
+
+        emit Liquidated(trader, msg.sender, sizeAbs, price);
+        if (!collateralToken.transfer(msg.sender, marginForLiquidator)) revert TransferFailed();
+    }
+
+    function getPosition(address trader) external view returns (int256 size, uint256 entryPrice, uint256 margin, uint256 lastUpdatedAt) {
+        Position storage pos = positions[trader];
+        return (pos.size, pos.entryPrice, pos.margin, pos.lastUpdatedAt);
+    }
+
+    function getMarginRatio(address trader) external view returns (uint256) {
+        return _marginRatio(positions[trader]);
+    }
+
+    function isLiquidatable(address trader) external view returns (bool) {
+        Position storage pos = positions[trader];
+        if (pos.size == 0) return false;
+        return _marginRatio(pos) < MAINTENANCE_MARGIN_BPS;
+    }
+
+    function getPositionHolderCount() external view returns (uint256) {
+        return _positionHolders.length;
+    }
+
+    function getPositionHolder(uint256 index) external view returns (address) {
+        require(index < _positionHolders.length, "Index out of bounds");
+        return _positionHolders[index];
+    }
+
+    function getActiveTradesWithHealth() external view returns (address[] memory traders, uint256[] memory healthBps) {
+        uint256 n = _positionHolders.length;
+        traders = new address[](n);
+        healthBps = new uint256[](n);
+        for (uint256 i = 0; i < n; i++) {
+            address trader = _positionHolders[i];
+            traders[i] = trader;
+            Position storage pos = positions[trader];
+            healthBps[i] = pos.size == 0 ? type(uint256).max : _marginRatio(pos);
+        }
+        return (traders, healthBps);
+    }
+
+    function getLiquidatableActiveTrades() external view returns (address[] memory liquidatable) {
+        uint256 n = _positionHolders.length;
+        uint256 count = 0;
+        for (uint256 i = 0; i < n; i++) {
+            address trader = _positionHolders[i];
+            Position storage pos = positions[trader];
+            if (pos.size != 0 && _marginRatio(pos) < MAINTENANCE_MARGIN_BPS) {
+                count++;
+            }
+        }
+        liquidatable = new address[](count);
+        uint256 j = 0;
+        for (uint256 i = 0; i < n; i++) {
+            address trader = _positionHolders[i];
+            Position storage pos = positions[trader];
+            if (pos.size != 0 && _marginRatio(pos) < MAINTENANCE_MARGIN_BPS) {
+                liquidatable[j] = trader;
+                j++;
+            }
+        }
+        return liquidatable;
+    }
+
+    function checkLiquidatableBatch(address[] calldata traders) external view returns (address[] memory liquidatableAddresses) {
+        uint256 count = 0;
+        for (uint256 i = 0; i < traders.length; i++) {
+            Position storage pos = positions[traders[i]];
+            if (pos.size != 0 && _marginRatio(pos) < MAINTENANCE_MARGIN_BPS) {
+                count++;
+            }
+        }
+        
+        liquidatableAddresses = new address[](count);
+        uint256 index = 0;
+        for (uint256 i = 0; i < traders.length; i++) {
+            Position storage pos = positions[traders[i]];
+            if (pos.size != 0 && _marginRatio(pos) < MAINTENANCE_MARGIN_BPS) {
+                liquidatableAddresses[index] = traders[i];
+                index++;
+            }
+        }
+        return liquidatableAddresses;
+    }
+
+
+    function liquidateBatch(address[] calldata traders) external returns (uint256 successCount) {
+        for (uint256 i = 0; i < traders.length; i++) {
+            Position storage pos = positions[traders[i]];
+            if (pos.size == 0) continue;
+            if (_marginRatio(pos) >= MAINTENANCE_MARGIN_BPS) continue;
+            
+            uint256 price = getMarkPrice();
+            uint256 sizeAbs = _abs(pos.size);
+            uint256 marginForLiquidator = pos.margin;
+            
+            // Clear position
+            pos.size = 0;
+            pos.entryPrice = 0;
+            pos.margin = 0;
+            pos.lastUpdatedAt = 0;
+            _removePositionHolder(traders[i]);
+
+            emit Liquidated(traders[i], msg.sender, sizeAbs, price);
+            if (collateralToken.transfer(msg.sender, marginForLiquidator)) {
+                successCount++;
+            }
+        }
+        return successCount;
+    }
+
+    function calculateMaxPositionSize(uint256 marginAmount, uint256 leverage) external view returns (
+        uint256 maxSize,
+        uint256 maxNotional,
+        uint256 requiredMargin
+    ) {
+        if (marginAmount == 0) return (0, 0, 0);
+        
+        uint256 price = getMarkPrice();
+        
+        if (leverage > MAX_LEVERAGE) leverage = MAX_LEVERAGE;
+        
+        maxNotional = (marginAmount * leverage) / (10 ** MARGIN_DECIMALS);
+        
+        
+        maxSize = (maxNotional * (10 ** PRICE_DECIMALS)) / price;
+        
+        
+        requiredMargin = marginAmount;
+        
+        return (maxSize, maxNotional, requiredMargin);
+    }
+
+    function calculateRequiredMargin(uint256 sizeAbs, uint256 leverage) external view returns (
+        uint256 requiredMargin,
+        uint256 notional
+    ) {
+        if (sizeAbs == 0 || leverage == 0) return (0, 0);
+        
+        uint256 price = getMarkPrice();
+        
+        notional = (sizeAbs * price) / (10 ** PRICE_DECIMALS);
+        
+        requiredMargin = (notional * (10 ** MARGIN_DECIMALS)) / leverage;
+        
+        if (leverage > MAX_LEVERAGE) {
+            requiredMargin = (notional * (10 ** MARGIN_DECIMALS)) / MAX_LEVERAGE;
+        }
+        
+        return (requiredMargin, notional);
+    }
+
+    function _notional(Position storage pos) internal view returns (uint256) {
+        return (_abs(pos.size) * pos.entryPrice) / (10 ** PRICE_DECIMALS);
+    }
+
+    function _marginRatio(Position storage pos) internal view returns (uint256) {
+        uint256 notional = _notional(pos);
+        if (notional == 0) return type(uint256).max;
+        uint256 price = getMarkPrice();
+        int256 pnl = _pnl(pos.size, pos.entryPrice, price, _abs(pos.size));
+        uint256 equity = pos.margin;
+        if (pnl >= 0) equity += uint256(pnl);
+        else if (uint256(-pnl) >= pos.margin) return 0;
+        else equity = pos.margin - uint256(-pnl);
+        return (equity * 10_000) / notional;
+    }
 
     function _pnl(int256 size, uint256 entryPrice, uint256 exitPrice, uint256 sizeAbs) internal pure returns (int256) {
         if (size > 0) return int256((sizeAbs * (exitPrice - entryPrice)) / (10 ** PRICE_DECIMALS));
