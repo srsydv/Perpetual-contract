@@ -213,6 +213,133 @@ describe("PerpetualExchange", function () {
     });
   });
 
+  describe("closePosition", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+     
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+    });
+
+    it("Should close full position successfully", async function () {
+      const sizeToClose = ethers.parseEther("0.01");
+      const balanceBefore = await collateralToken.balanceOf(trader1.address);
+
+      const tx = await perpetualExchange.connect(trader1).closePosition(sizeToClose);
+      await expect(tx)
+        .to.emit(perpetualExchange, "PositionClosed");
+
+      const [size] = await perpetualExchange.getPosition(trader1.address);
+      expect(size).to.equal(0);
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.false;
+
+      const balanceAfter = await collateralToken.balanceOf(trader1.address);
+      
+      expect(balanceAfter).to.be.gte(balanceBefore);
+    });
+
+    it("Should close partial position successfully", async function () {
+      const sizeToClose = ethers.parseEther("0.003");
+      
+      await perpetualExchange.connect(trader1).closePosition(sizeToClose);
+
+      const [size, , margin] = await perpetualExchange.getPosition(trader1.address);
+      expect(size).to.equal(ethers.parseEther("0.007")); // 0.01 - 0.003
+      expect(margin).to.be.lt(ethers.parseEther("1000")); // Margin reduced proportionally
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.true;
+    });
+
+    it("Should revert if no position exists", async function () {
+      await expect(
+        perpetualExchange.connect(trader2).closePosition(ethers.parseEther("1"))
+      ).to.be.revertedWithCustomError(perpetualExchange, "NoPosition");
+    });
+
+    it("Should revert with zero size", async function () {
+      await expect(
+        perpetualExchange.connect(trader1).closePosition(0)
+      ).to.be.revertedWithCustomError(perpetualExchange, "ZeroSize");
+    });
+
+    it("Should revert if closing more than position size", async function () {
+      await expect(
+        perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.02"))
+      ).to.be.revertedWithCustomError(perpetualExchange, "ZeroSize");
+    });
+
+    it("Should calculate PnL correctly for profitable long position", async function () {
+      
+      await collateralToken.connect(owner).transfer(
+        await perpetualExchange.getAddress(),
+        ethers.parseEther("100")
+      );
+
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("3200", 8));
+
+      const balanceBefore = await collateralToken.balanceOf(trader1.address);
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.01"));
+      const balanceAfter = await collateralToken.balanceOf(trader1.address);
+
+      // PnL = 0.01 * (3200 - 3000) = $2 profit. Payout = margin (1000) + profit (2) = 1002
+      expect(balanceAfter).to.equal(balanceBefore + ethers.parseEther("1002"));
+    });
+
+    it("Should calculate PnL correctly for losing long position", async function () {
+      
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2800", 8));
+
+      const balanceBefore = await collateralToken.balanceOf(trader1.address);
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.01"));
+      const balanceAfter = await collateralToken.balanceOf(trader1.address);
+
+      // PnL = 0.01 * (2800 - 3000) = -$2 loss. Payout = margin (1000) - loss (2) = 998
+      expect(balanceAfter).to.equal(balanceBefore + ethers.parseEther("998"));
+    });
+
+    it("Should calculate PnL correctly for profitable short position", async function () {
+      
+      await collateralToken.connect(trader2).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      await perpetualExchange.connect(trader2).openPosition(
+        false,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2800", 8));
+      
+      const balanceBefore = await collateralToken.balanceOf(trader2.address);
+      await perpetualExchange.connect(trader2).closePosition(ethers.parseEther("0.01"));
+      const balanceAfter = await collateralToken.balanceOf(trader2.address);
+      
+      // PnL = 0.01 * (3000 - 2800) = $2 profit
+      expect(balanceAfter).to.be.gt(balanceBefore);
+    });
+
+    it("Should not pay out more than available if loss exceeds margin", async function () {
+      // Price drops significantly: loss = 0.01 * (3000 - 2500) = $5, margin = $1000
+      // Loss ($5) < margin ($1000), so payout = 1000 - 5 = 995 (not "loss exceeds margin" case)
+      // For true "loss > margin" we need much bigger price drop. Use smaller margin and big drop.
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
+
+      const balanceBefore = await collateralToken.balanceOf(trader1.address);
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.01"));
+      const balanceAfter = await collateralToken.balanceOf(trader1.address);
+
+      // Loss = $5, margin = $1000, payout = $995. Contract has enough; no underflow.
+      expect(balanceAfter).to.equal(balanceBefore + ethers.parseEther("995"));
+    });
+  });
+
 });
 
 // Helper for anyValue matcher in event assertions

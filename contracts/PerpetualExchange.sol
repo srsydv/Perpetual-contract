@@ -362,8 +362,26 @@ contract PerpetualExchange {
     }
 
     function _pnl(int256 size, uint256 entryPrice, uint256 exitPrice, uint256 sizeAbs) internal pure returns (int256) {
-        if (size > 0) return int256((sizeAbs * (exitPrice - entryPrice)) / (10 ** PRICE_DECIMALS));
-        return int256((sizeAbs * (entryPrice - exitPrice)) / (10 ** PRICE_DECIMALS));
+        uint256 priceDiff;
+        if (size > 0) {
+            // Long: profit when exitPrice > entryPrice
+            if (exitPrice >= entryPrice) {
+                priceDiff = exitPrice - entryPrice;
+                return int256((sizeAbs * priceDiff) / (10 ** PRICE_DECIMALS));
+            } else {
+                priceDiff = entryPrice - exitPrice;
+                return -int256((sizeAbs * priceDiff) / (10 ** PRICE_DECIMALS));
+            }
+        } else {
+            // Short: profit when exitPrice < entryPrice
+            if (entryPrice >= exitPrice) {
+                priceDiff = entryPrice - exitPrice;
+                return int256((sizeAbs * priceDiff) / (10 ** PRICE_DECIMALS));
+            } else {
+                priceDiff = exitPrice - entryPrice;
+                return -int256((sizeAbs * priceDiff) / (10 ** PRICE_DECIMALS));
+            }
+        }
     }
 
     function _abs(int256 x) internal pure returns (uint256) {
