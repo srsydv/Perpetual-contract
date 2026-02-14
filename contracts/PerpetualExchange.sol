@@ -2,6 +2,8 @@
 pragma solidity ^0.8.24;
 
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
+import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 
 interface IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
@@ -9,9 +11,9 @@ interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
 }
 
-contract PerpetualExchange {
-    AggregatorV3Interface public immutable priceFeed;
-    IERC20 public immutable collateralToken;
+contract PerpetualExchange is Initializable, UUPSUpgradeable {
+    AggregatorV3Interface public priceFeed;
+    IERC20 public collateralToken;
 
     uint256 public constant PRICE_DECIMALS = 8;
     uint256 public constant MARGIN_DECIMALS = 18;
@@ -57,13 +59,21 @@ contract PerpetualExchange {
         _;
     }
 
-    constructor(address _priceFeed, address _collateralToken) {
+    /// @custom:oz-upgrades-unsafe-allow constructor
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _priceFeed, address _collateralToken) external initializer {
         if (_priceFeed == address(0)) revert InvalidPriceFeed();
         if (_collateralToken == address(0)) revert InvalidCollateralToken();
+        __UUPSUpgradeable_init();
         owner = msg.sender;
         priceFeed = AggregatorV3Interface(_priceFeed);
         collateralToken = IERC20(_collateralToken);
     }
+
+    function _authorizeUpgrade(address) internal override onlyOwner {}
 
     function setTradedToken(address _tradedToken) external onlyOwner {
         tradedToken = _tradedToken;
@@ -365,7 +375,7 @@ contract PerpetualExchange {
     function _pnl(int256 size, uint256 entryPrice, uint256 exitPrice, uint256 sizeAbs) internal pure returns (int256) {
         uint256 priceDiff;
         if (size > 0) {
-            // Long: profit when exitPrice > entryPrice
+            
             if (exitPrice >= entryPrice) {
                 priceDiff = exitPrice - entryPrice;
                 return int256((sizeAbs * priceDiff) / (10 ** PRICE_DECIMALS));

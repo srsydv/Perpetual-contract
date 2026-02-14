@@ -31,13 +31,18 @@ describe("PerpetualExchange", function () {
     mockPriceFeed = await MockAggregator.deploy(INITIAL_PRICE);
     await mockPriceFeed.waitForDeployment();
 
-    // Deploy PerpetualExchange
+    // Deploy PerpetualExchange (upgradeable: implementation + proxy)
     const PerpetualExchange = await ethers.getContractFactory("PerpetualExchange");
-    perpetualExchange = await PerpetualExchange.deploy(
+    const impl = await PerpetualExchange.deploy();
+    await impl.waitForDeployment();
+    const ExchangeProxy = await ethers.getContractFactory("ExchangeProxy");
+    const initData = PerpetualExchange.interface.encodeFunctionData("initialize", [
       await mockPriceFeed.getAddress(),
-      await collateralToken.getAddress()
-    );
-    await perpetualExchange.waitForDeployment();
+      await collateralToken.getAddress(),
+    ]);
+    const proxy = await ExchangeProxy.deploy(await impl.getAddress(), initData);
+    await proxy.waitForDeployment();
+    perpetualExchange = PerpetualExchange.attach(await proxy.getAddress());
   });
 
   describe("Deployment", function () {
@@ -53,16 +58,30 @@ describe("PerpetualExchange", function () {
 
     it("Should revert with zero address for price feed", async function () {
       const PerpetualExchange = await ethers.getContractFactory("PerpetualExchange");
+      const impl = await PerpetualExchange.deploy();
+      await impl.waitForDeployment();
+      const ExchangeProxy = await ethers.getContractFactory("ExchangeProxy");
+      const initData = PerpetualExchange.interface.encodeFunctionData("initialize", [
+        ethers.ZeroAddress,
+        await collateralToken.getAddress(),
+      ]);
       await expect(
-        PerpetualExchange.deploy(ethers.ZeroAddress, await collateralToken.getAddress())
-      ).to.be.revertedWithCustomError(perpetualExchange, "InvalidPriceFeed");
+        ExchangeProxy.deploy(await impl.getAddress(), initData)
+      ).to.be.revertedWithCustomError(impl, "InvalidPriceFeed");
     });
 
     it("Should revert with zero address for collateral token", async function () {
       const PerpetualExchange = await ethers.getContractFactory("PerpetualExchange");
+      const impl = await PerpetualExchange.deploy();
+      await impl.waitForDeployment();
+      const ExchangeProxy = await ethers.getContractFactory("ExchangeProxy");
+      const initData = PerpetualExchange.interface.encodeFunctionData("initialize", [
+        await mockPriceFeed.getAddress(),
+        ethers.ZeroAddress,
+      ]);
       await expect(
-        PerpetualExchange.deploy(await mockPriceFeed.getAddress(), ethers.ZeroAddress)
-      ).to.be.revertedWithCustomError(perpetualExchange, "InvalidCollateralToken");
+        ExchangeProxy.deploy(await impl.getAddress(), initData)
+      ).to.be.revertedWithCustomError(impl, "InvalidCollateralToken");
     });
   });
 
@@ -752,7 +771,7 @@ describe("PerpetualExchange", function () {
       await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
       
       const liquidatable = await perpetualExchange.getLiquidatableActiveTrades();
-      expect(liquidatable.length).to.be.gte(0); // At least trader1 should be liquidatable
+      expect(liquidatable.length).to.be.gte(0); 
       if (liquidatable.length > 0) {
         expect(liquidatable).to.include(trader1.address);
       }
@@ -782,9 +801,9 @@ describe("PerpetualExchange", function () {
     });
 
     it("Should handle maximum leverage position", async function () {
-      // Use smaller position that works with the leverage check
+      
       const sizeAbs = ethers.parseEther("1");
-      const marginAmount = ethers.parseEther("200"); // Lower margin for testing
+      const marginAmount = ethers.parseEther("200"); 
       // Notional = 1 * 3000 = $3,000
       // Leverage = $3,000 / $200 = 15x (within 20x limit)
       
@@ -812,12 +831,12 @@ describe("PerpetualExchange", function () {
         ethers.parseEther("1000")
       );
       
-      // Price stays at entry price
+      
       const balanceBefore = await collateralToken.balanceOf(trader1.address);
       await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.01"));
       const balanceAfter = await collateralToken.balanceOf(trader1.address);
       
-      // Should receive exactly margin back (no PnL)
+      
       expect(balanceAfter).to.equal(balanceBefore + ethers.parseEther("1000"));
     });
 
@@ -828,17 +847,17 @@ describe("PerpetualExchange", function () {
         ethers.parseEther("1000")
       );
       
-      // Close 0.003 ETH
+      
       await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.003"));
       let [size] = await perpetualExchange.getPosition(trader1.address);
       expect(size).to.equal(ethers.parseEther("0.007"));
       
-      // Close 0.003 more ETH
+      
       await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.003"));
       [size] = await perpetualExchange.getPosition(trader1.address);
       expect(size).to.equal(ethers.parseEther("0.004"));
       
-      // Close remaining
+      
       await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.004"));
       [size] = await perpetualExchange.getPosition(trader1.address);
       expect(size).to.equal(0);
@@ -852,15 +871,15 @@ describe("PerpetualExchange", function () {
         ethers.parseEther("1000")
       );
       
-      // Price increases
+      
       await mockPriceFeed.updateAnswer(ethers.parseUnits("3500", 8));
       let ratio1 = await perpetualExchange.getMarginRatio(trader1.address);
       
-      // Price decreases
+      
       await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
       let ratio2 = await perpetualExchange.getMarginRatio(trader1.address);
       
-      // Ratio should decrease (price drop = loss for long position)
+      
       expect(Number(ratio2)).to.be.lt(Number(ratio1));
     });
   });
@@ -893,13 +912,13 @@ describe("PerpetualExchange", function () {
         ethers.parseEther("10000")
       );
       
-      // Make positions liquidatable by dropping price significantly
+      
       await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
       
       const traders = [trader1.address, trader2.address];
       const liquidatable = await perpetualExchange.checkLiquidatableBatch(traders);
       
-      // At least one should be liquidatable
+      
       expect(liquidatable.length).to.be.gte(0);
       if (liquidatable.length > 0) {
         expect(liquidatable).to.include.members([trader1.address, trader2.address]);
@@ -907,42 +926,28 @@ describe("PerpetualExchange", function () {
     });
 
     it("Should batch liquidate multiple positions", async function () {
+      
       await perpetualExchange.connect(trader1).openPosition(
         true,
-        ethers.parseEther("0.001"),
-        ethers.parseEther("10000")
+        ethers.parseEther("1"),
+        ethers.parseEther("1000")
       );
       await perpetualExchange.connect(trader2).openPosition(
-        false,
-        ethers.parseEther("0.001"),
-        ethers.parseEther("10000")
+        true,
+        ethers.parseEther("1"),
+        ethers.parseEther("1000")
       );
-      
-      await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
-      
+
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2100", 8));
+
       const traders = [trader1.address, trader2.address];
-      const successCount = await perpetualExchange.connect(liquidator).liquidateBatch(traders);
-      
-      // Should liquidate at least some positions
-      expect(successCount).to.be.gte(0);
-      if (successCount > 0) {
-        // Check that liquidated traders are removed from active trades
-        const liquidated = [];
-        if (successCount === 2) {
-          liquidated.push(trader1.address, trader2.address);
-        } else if (successCount === 1) {
-          // Find which trader was liquidated
-          const isTrader1Liquidatable = await perpetualExchange.isLiquidatable(trader1.address);
-          if (isTrader1Liquidatable) {
-            liquidated.push(trader1.address);
-          } else {
-            liquidated.push(trader2.address);
-          }
-        }
-        for (const trader of liquidated) {
-          expect(await perpetualExchange.activeTrades(trader)).to.be.false;
-        }
-      }
+      // State-changing call returns a tx object; use staticCall to get return value
+      const successCount = await perpetualExchange.connect(liquidator).liquidateBatch.staticCall(traders);
+      await perpetualExchange.connect(liquidator).liquidateBatch(traders);
+
+      expect(Number(successCount)).to.equal(2);
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.false;
+      expect(await perpetualExchange.activeTrades(trader2.address)).to.be.false;
     });
   });
 });

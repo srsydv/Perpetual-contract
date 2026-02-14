@@ -91,11 +91,20 @@ async function main() {
   }
   console.log("");
 
-  // Deploy PerpetualExchange
-  console.log("Deploying PerpetualExchange...");
+  // Deploy PerpetualExchange (upgradeable: implementation + proxy)
+  console.log("Deploying PerpetualExchange (implementation)...");
   const PerpetualExchange = await hre.ethers.getContractFactory("PerpetualExchange");
-  const exchange = await PerpetualExchange.deploy(priceFeedAddress, collateralTokenAddress);
-  await exchange.waitForDeployment();
+  const impl = await PerpetualExchange.deploy();
+  await impl.waitForDeployment();
+  console.log("Deploying proxy and initializing...");
+  const ExchangeProxy = await hre.ethers.getContractFactory("ExchangeProxy");
+  const initData = PerpetualExchange.interface.encodeFunctionData("initialize", [
+    priceFeedAddress,
+    collateralTokenAddress,
+  ]);
+  const proxy = await ExchangeProxy.deploy(await impl.getAddress(), initData);
+  await proxy.waitForDeployment();
+  const exchange = PerpetualExchange.attach(await proxy.getAddress());
   const exchangeAddress = await exchange.getAddress();
 
   console.log("\n" + "=".repeat(60));
