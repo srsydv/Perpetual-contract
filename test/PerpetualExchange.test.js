@@ -689,27 +689,29 @@ describe("PerpetualExchange", function () {
         ethers.parseEther("0.01"),
         ethers.parseEther("1000")
       );
-      
-      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.3"));
-      
+
+      // Close 0.003 of 0.01 (partial), leave 0.007
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.003"));
+
       expect(await perpetualExchange.activeTrades(trader1.address)).to.be.true;
     });
 
     it("Should remove trader when liquidated", async function () {
+      // Use setup that can be liquidated: 1 ETH, 1000 margin → price 2100 gives ratio < 5%
       await perpetualExchange.connect(trader1).openPosition(
         true,
-        ethers.parseEther("0.01"),
-        ethers.parseEther("500")
+        ethers.parseEther("1"),
+        ethers.parseEther("1000")
       );
-      
-      await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
-      
+
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2100", 8));
+
       await collateralToken.connect(liquidator).approve(
         await perpetualExchange.getAddress(),
         ethers.MaxUint256
       );
       await perpetualExchange.connect(liquidator).liquidate(trader1.address);
-      
+
       expect(await perpetualExchange.activeTrades(trader1.address)).to.be.false;
     });
 
