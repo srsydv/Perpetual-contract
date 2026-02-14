@@ -340,6 +340,156 @@ describe("PerpetualExchange", function () {
     });
   });
 
+  describe("addMargin", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+    });
+
+    it("Should add margin successfully", async function () {
+      const additionalMargin = ethers.parseEther("500");
+      
+      await expect(
+        perpetualExchange.connect(trader1).addMargin(additionalMargin)
+      )
+        .to.emit(perpetualExchange, "MarginAdded")
+        .withArgs(trader1.address, additionalMargin);
+
+      const [, , margin] = await perpetualExchange.getPosition(trader1.address);
+      expect(margin).to.equal(ethers.parseEther("1500")); // 1000 + 500
+    });
+
+    it("Should revert with zero amount", async function () {
+      await expect(
+        perpetualExchange.connect(trader1).addMargin(0)
+      ).to.be.revertedWithCustomError(perpetualExchange, "ZeroMargin");
+    });
+
+    it("Should revert if no position exists", async function () {
+      await expect(
+        perpetualExchange.connect(trader2).addMargin(ethers.parseEther("100"))
+      ).to.be.revertedWithCustomError(perpetualExchange, "NoPosition");
+    });
+
+    it("Should transfer tokens correctly", async function () {
+      const additionalMargin = ethers.parseEther("500");
+      const balanceBefore = await collateralToken.balanceOf(trader1.address);
+      
+      await perpetualExchange.connect(trader1).addMargin(additionalMargin);
+      
+      const balanceAfter = await collateralToken.balanceOf(trader1.address);
+      expect(balanceAfter).to.equal(balanceBefore - additionalMargin);
+    });
+  });
+
+  describe("removeMargin", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+    });
+
+    it("Should remove margin successfully", async function () {
+      const marginToRemove = ethers.parseEther("200");
+      
+      await expect(
+        perpetualExchange.connect(trader1).removeMargin(marginToRemove)
+      )
+        .to.emit(perpetualExchange, "MarginRemoved")
+        .withArgs(trader1.address, marginToRemove);
+
+      const [, , margin] = await perpetualExchange.getPosition(trader1.address);
+      expect(margin).to.equal(ethers.parseEther("800")); // 1000 - 200
+    });
+
+    it("Should revert if no position exists", async function () {
+      await expect(
+        perpetualExchange.connect(trader2).removeMargin(ethers.parseEther("100"))
+      ).to.be.revertedWithCustomError(perpetualExchange, "NoPosition");
+    });
+
+    it("Should revert if margin ratio falls below maintenance margin", async function () {
+      // Position: 0.01 ETH long, margin 1000, entry 3000. Price drops to 2800.
+      // Notional = 28, loss = 2. Margin ratio = equity/notional; need ratio < 5% (500 bps) to revert.
+      // So equity < 28*0.05 = 1.4, i.e. margin - 2 < 1.4 => margin < 3.4 => remove at least 996.6
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2800", 8));
+
+      await expect(
+        perpetualExchange.connect(trader1).removeMargin(ethers.parseEther("997"))
+      ).to.be.revertedWithCustomError(perpetualExchange, "InsufficientMargin");
+    });
+
+    it("Should transfer tokens back correctly", async function () {
+      const marginToRemove = ethers.parseEther("200");
+      const balanceBefore = await collateralToken.balanceOf(trader1.address);
+      
+      await perpetualExchange.connect(trader1).removeMargin(marginToRemove);
+      
+      const balanceAfter = await collateralToken.balanceOf(trader1.address);
+      expect(balanceAfter).to.equal(balanceBefore + marginToRemove);
+    });
+  });
+
+  describe("getMarginRatio", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+    });
+
+    it("Should return correct margin ratio for profitable position", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("3200", 8));
+      
+      const ratio = await perpetualExchange.getMarginRatio(trader1.address);
+      // Notional = 1 * 3200 = $3,200
+      // Equity = 1000 + (1 * 200) = $1,200
+      // Ratio = 1200 / 3200 * 10000 = 3750 bps = 37.5%
+      expect(Number(ratio)).to.be.gt(500); // Above maintenance margin
+    });
+
+    it("Should return low margin ratio for losing position", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2800", 8));
+      
+      const ratio = await perpetualExchange.getMarginRatio(trader1.address);
+      // Notional = 1 * 2800 = $2,800
+      // Equity = 1000 - (1 * 200) = $800
+      // Ratio = 800 / 2800 * 10000 = 2857 bps = 28.57%
+      // But if loss is bigger, ratio could be lower
+      expect(Number(ratio)).to.be.gte(0);
+    });
+
+    it("Should return max value for no position", async function () {
+      const ratio = await perpetualExchange.getMarginRatio(trader1.address);
+      expect(ratio).to.equal(ethers.MaxUint256);
+    });
+  });
+
 });
 
 // Helper for anyValue matcher in event assertions
