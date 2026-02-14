@@ -490,6 +490,94 @@ describe("PerpetualExchange", function () {
     });
   });
 
+  describe("isLiquidatable", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      // 1 ETH, 1000 margin: at 3000 notional=3000 (healthy). At 2100 notional=2100, loss=900, equity=100, ratio=476 bps < 500 → liquidatable
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("1"),
+        ethers.parseEther("1000")
+      );
+    });
+
+    it("Should return false for healthy position", async function () {
+      const liquidatable = await perpetualExchange.isLiquidatable(trader1.address);
+      expect(liquidatable).to.be.false;
+    });
+
+    it("Should return true when margin ratio < 5%", async function () {
+      // 1 ETH long, 1000 margin, entry 3000. Price → 2100: loss=900, equity=100, notional=2100, ratio ≈ 476 bps < 500
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2100", 8));
+
+      const liquidatable = await perpetualExchange.isLiquidatable(trader1.address);
+      expect(liquidatable).to.be.true;
+    });
+
+    it("Should return false for no position", async function () {
+      const liquidatable = await perpetualExchange.isLiquidatable(trader2.address);
+      expect(liquidatable).to.be.false;
+    });
+  });
+
+  describe("liquidate", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      await collateralToken.connect(liquidator).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+
+      // 1 ETH, 1000 margin: at 2100 notional=2100, loss=900, equity=100, ratio ≈476 bps < 500 → liquidatable
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("1"),
+        ethers.parseEther("1000")
+      );
+
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2100", 8));
+    });
+
+    it("Should liquidate position successfully", async function () {
+      const liquidatorBalanceBefore = await collateralToken.balanceOf(liquidator.address);
+      
+      const tx = await perpetualExchange.connect(liquidator).liquidate(trader1.address);
+      await expect(tx)
+        .to.emit(perpetualExchange, "Liquidated")
+        .withArgs(trader1.address, liquidator.address, anyValue, anyValue);
+
+      const [size] = await perpetualExchange.getPosition(trader1.address);
+      expect(size).to.equal(0);
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.false;
+
+      const liquidatorBalanceAfter = await collateralToken.balanceOf(liquidator.address);
+      
+      expect(liquidatorBalanceAfter).to.be.gte(liquidatorBalanceBefore);
+    });
+
+    it("Should revert if position is not liquidatable", async function () {
+      
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("3000", 8));
+      
+      await expect(
+        perpetualExchange.connect(liquidator).liquidate(trader1.address)
+      ).to.be.revertedWithCustomError(perpetualExchange, "PositionNotLiquidatable");
+    });
+
+    it("Should revert if no position exists", async function () {
+      await expect(
+        perpetualExchange.connect(liquidator).liquidate(trader2.address)
+      ).to.be.revertedWithCustomError(perpetualExchange, "NoPosition");
+    });
+  });
+
+
 });
 
 // Helper for anyValue matcher in event assertions
