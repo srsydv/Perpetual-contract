@@ -121,7 +121,7 @@ contract PerpetualExchange {
         pos.lastUpdatedAt = block.timestamp;
 
         if (_notional(pos) > totalMargin * MAX_LEVERAGE) revert ExceedsMaxLeverage();
-        
+
         emit PositionOpened(msg.sender, isLong, sizeAbs, price, marginAmount);
     }
 
@@ -336,10 +336,11 @@ contract PerpetualExchange {
         
         notional = (sizeAbs * price) / (10 ** PRICE_DECIMALS);
         
-        requiredMargin = (notional * (10 ** MARGIN_DECIMALS)) / leverage;
+        // notional is already in 18 decimals; required margin = notional / leverage
+        requiredMargin = notional / leverage;
         
         if (leverage > MAX_LEVERAGE) {
-            requiredMargin = (notional * (10 ** MARGIN_DECIMALS)) / MAX_LEVERAGE;
+            requiredMargin = notional / MAX_LEVERAGE;
         }
         
         return (requiredMargin, notional);

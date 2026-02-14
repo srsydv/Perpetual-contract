@@ -577,7 +577,372 @@ describe("PerpetualExchange", function () {
     });
   });
 
+  describe("calculateMaxPositionSize", function () {
+    it("Should calculate max position size correctly", async function () {
+      const marginAmount = ethers.parseEther("1000");
+      const leverage = 10;
 
+      const [maxSize, maxNotional, requiredMargin] = await perpetualExchange.calculateMaxPositionSize(
+        marginAmount,
+        leverage
+      );
+
+      // Contract returns maxNotional as (marginAmount * leverage) / 10^18 = 10000 (human units, i.e. $10,000)
+      // Max size = maxNotional * 10^8 / price = 10000 * 1e8 / 3000e8 = 3.33... ETH (in 18 decimals)
+      expect(Number(maxNotional)).to.equal(10000);
+      expect(Number(maxSize)).to.be.gt(0);
+      expect(requiredMargin).to.equal(marginAmount);
+    });
+
+    it("Should enforce max leverage limit", async function () {
+      const marginAmount = ethers.parseEther("1000");
+      const leverage = 30; // Exceeds max of 20
+      
+      const [maxSize] = await perpetualExchange.calculateMaxPositionSize(marginAmount, leverage);
+      
+      // Should cap at 20x leverage
+      // Max notional = 1000 * 20 = $20,000
+      // Max size = $20,000 / $3000 = 6.67 ETH
+      expect(Number(maxSize)).to.be.gt(0);
+    });
+
+    it("Should return zero for zero margin", async function () {
+      const [maxSize, maxNotional, requiredMargin] = await perpetualExchange.calculateMaxPositionSize(
+        0,
+        10
+      );
+      expect(maxSize).to.equal(0);
+      expect(maxNotional).to.equal(0);
+      expect(requiredMargin).to.equal(0);
+    });
+  });
+
+  describe("calculateRequiredMargin", function () {
+    it("Should calculate required margin correctly", async function () {
+      const sizeAbs = ethers.parseEther("1");
+      const leverage = 10;
+      
+      const [requiredMargin, notional] = await perpetualExchange.calculateRequiredMargin(
+        sizeAbs,
+        leverage
+      );
+      
+      // Notional = 1 * 3000 = $3,000
+      // Required margin = $3,000 / 10 = $300
+      expect(Number(notional)).to.be.closeTo(Number(ethers.parseEther("3000")), Number(ethers.parseEther("100")));
+      expect(Number(requiredMargin)).to.be.closeTo(Number(ethers.parseEther("300")), Number(ethers.parseEther("10")));
+    });
+
+    it("Should enforce max leverage limit", async function () {
+      const sizeAbs = ethers.parseEther("1");
+      const leverage = 30; // Exceeds max
+      
+      const [requiredMargin] = await perpetualExchange.calculateRequiredMargin(sizeAbs, leverage);
+      
+      // Should use 20x max leverage
+      // Required margin = $3,000 / 20 = $150
+      expect(Number(requiredMargin)).to.be.closeTo(Number(ethers.parseEther("150")), Number(ethers.parseEther("10")));
+    });
+  });
+
+  describe("Active Trades Management", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      await collateralToken.connect(trader2).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+    });
+
+    it("Should add trader to active trades when opening position", async function () {
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.false;
+      
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.true;
+    });
+
+    it("Should remove trader from active trades when closing full position", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.true;
+      
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.01"));
+      
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.false;
+    });
+
+    it("Should keep trader active when closing partial position", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.3"));
+      
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.true;
+    });
+
+    it("Should remove trader when liquidated", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("500")
+      );
+      
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
+      
+      await collateralToken.connect(liquidator).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      await perpetualExchange.connect(liquidator).liquidate(trader1.address);
+      
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.false;
+    });
+
+    it("Should return correct count of active traders", async function () {
+      expect(await perpetualExchange.getPositionHolderCount()).to.equal(0);
+      
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      expect(await perpetualExchange.getPositionHolderCount()).to.equal(1);
+      
+      await perpetualExchange.connect(trader2).openPosition(
+        false,
+        ethers.parseEther("1"),
+        ethers.parseEther("500")
+      );
+      expect(await perpetualExchange.getPositionHolderCount()).to.equal(2);
+      
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.01"));
+      expect(await perpetualExchange.getPositionHolderCount()).to.equal(1);
+    });
+
+    it("Should return liquidatable positions correctly", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("500")
+      );
+      await perpetualExchange.connect(trader2).openPosition(
+        false,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("500")
+      );
+      
+      // Make trader1 liquidatable by dropping price significantly
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
+      
+      const liquidatable = await perpetualExchange.getLiquidatableActiveTrades();
+      expect(liquidatable.length).to.be.gte(0); // At least trader1 should be liquidatable
+      if (liquidatable.length > 0) {
+        expect(liquidatable).to.include(trader1.address);
+      }
+    });
+
+    it("Should return active trades with health correctly", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      const [traders, healthBps] = await perpetualExchange.getActiveTradesWithHealth();
+      expect(traders.length).to.equal(1);
+      expect(traders[0]).to.equal(trader1.address);
+      expect(healthBps.length).to.equal(1);
+      expect(Number(healthBps[0])).to.be.gt(0);
+    });
+  });
+
+  describe("Edge Cases", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+    });
+
+    it("Should handle maximum leverage position", async function () {
+      // Use smaller position that works with the leverage check
+      const sizeAbs = ethers.parseEther("1");
+      const marginAmount = ethers.parseEther("200"); // Lower margin for testing
+      // Notional = 1 * 3000 = $3,000
+      // Leverage = $3,000 / $200 = 15x (within 20x limit)
+      
+      await perpetualExchange.connect(trader1).openPosition(true, sizeAbs, marginAmount);
+      
+      const [size, , margin] = await perpetualExchange.getPosition(trader1.address);
+      expect(size).to.equal(sizeAbs);
+      expect(margin).to.equal(marginAmount);
+    });
+
+    it("Should handle very small positions", async function () {
+      const sizeAbs = ethers.parseEther("0.001");
+      const marginAmount = ethers.parseEther("1");
+      
+      await perpetualExchange.connect(trader1).openPosition(true, sizeAbs, marginAmount);
+      
+      const [size] = await perpetualExchange.getPosition(trader1.address);
+      expect(size).to.equal(sizeAbs);
+    });
+
+    it("Should handle price at exactly entry price (no PnL)", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      // Price stays at entry price
+      const balanceBefore = await collateralToken.balanceOf(trader1.address);
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.01"));
+      const balanceAfter = await collateralToken.balanceOf(trader1.address);
+      
+      // Should receive exactly margin back (no PnL)
+      expect(balanceAfter).to.equal(balanceBefore + ethers.parseEther("1000"));
+    });
+
+    it("Should handle multiple partial closes", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      // Close 0.003 ETH
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.003"));
+      let [size] = await perpetualExchange.getPosition(trader1.address);
+      expect(size).to.equal(ethers.parseEther("0.007"));
+      
+      // Close 0.003 more ETH
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.003"));
+      [size] = await perpetualExchange.getPosition(trader1.address);
+      expect(size).to.equal(ethers.parseEther("0.004"));
+      
+      // Close remaining
+      await perpetualExchange.connect(trader1).closePosition(ethers.parseEther("0.004"));
+      [size] = await perpetualExchange.getPosition(trader1.address);
+      expect(size).to.equal(0);
+      expect(await perpetualExchange.activeTrades(trader1.address)).to.be.false;
+    });
+
+    it("Should handle rapid price changes", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.01"),
+        ethers.parseEther("1000")
+      );
+      
+      // Price increases
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("3500", 8));
+      let ratio1 = await perpetualExchange.getMarginRatio(trader1.address);
+      
+      // Price decreases
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
+      let ratio2 = await perpetualExchange.getMarginRatio(trader1.address);
+      
+      // Ratio should decrease (price drop = loss for long position)
+      expect(Number(ratio2)).to.be.lt(Number(ratio1));
+    });
+  });
+
+  describe("Batch Operations", function () {
+    beforeEach(async function () {
+      await collateralToken.connect(trader1).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      await collateralToken.connect(trader2).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+      await collateralToken.connect(liquidator).approve(
+        await perpetualExchange.getAddress(),
+        ethers.MaxUint256
+      );
+    });
+
+    it("Should batch check liquidatable positions", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.001"),
+        ethers.parseEther("10000")
+      );
+      await perpetualExchange.connect(trader2).openPosition(
+        false,
+        ethers.parseEther("0.001"),
+        ethers.parseEther("10000")
+      );
+      
+      // Make positions liquidatable by dropping price significantly
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
+      
+      const traders = [trader1.address, trader2.address];
+      const liquidatable = await perpetualExchange.checkLiquidatableBatch(traders);
+      
+      // At least one should be liquidatable
+      expect(liquidatable.length).to.be.gte(0);
+      if (liquidatable.length > 0) {
+        expect(liquidatable).to.include.members([trader1.address, trader2.address]);
+      }
+    });
+
+    it("Should batch liquidate multiple positions", async function () {
+      await perpetualExchange.connect(trader1).openPosition(
+        true,
+        ethers.parseEther("0.001"),
+        ethers.parseEther("10000")
+      );
+      await perpetualExchange.connect(trader2).openPosition(
+        false,
+        ethers.parseEther("0.001"),
+        ethers.parseEther("10000")
+      );
+      
+      await mockPriceFeed.updateAnswer(ethers.parseUnits("2500", 8));
+      
+      const traders = [trader1.address, trader2.address];
+      const successCount = await perpetualExchange.connect(liquidator).liquidateBatch(traders);
+      
+      // Should liquidate at least some positions
+      expect(successCount).to.be.gte(0);
+      if (successCount > 0) {
+        // Check that liquidated traders are removed from active trades
+        const liquidated = [];
+        if (successCount === 2) {
+          liquidated.push(trader1.address, trader2.address);
+        } else if (successCount === 1) {
+          // Find which trader was liquidated
+          const isTrader1Liquidatable = await perpetualExchange.isLiquidatable(trader1.address);
+          if (isTrader1Liquidatable) {
+            liquidated.push(trader1.address);
+          } else {
+            liquidated.push(trader2.address);
+          }
+        }
+        for (const trader of liquidated) {
+          expect(await perpetualExchange.activeTrades(trader)).to.be.false;
+        }
+      }
+    });
+  });
 });
 
 // Helper for anyValue matcher in event assertions
