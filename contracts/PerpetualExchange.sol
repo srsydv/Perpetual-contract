@@ -50,6 +50,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpg
     error PositionNotLiquidatable();
     error TransferFailed();
     error OnlyOwner();
+    error InsufficientLiquidity();
 
     address public owner;
     address public tradedToken;
@@ -104,13 +105,16 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpg
         if (sizeAbs == 0) revert ZeroSize();
         if (marginAmount == 0) revert ZeroMargin();
 
+        uint256 balBefore = collateralToken.balanceOf(address(this));
         if (!collateralToken.transferFrom(msg.sender, address(this), marginAmount)) revert TransferFailed();
+        uint256 received = collateralToken.balanceOf(address(this)) - balBefore;
+        if (received == 0) revert TransferFailed();
 
         uint256 price = getMarkPrice();
         int256 size = isLong ? int256(sizeAbs) : -int256(sizeAbs);
 
         Position storage pos = positions[msg.sender];
-        uint256 totalMargin = pos.margin + marginAmount;
+        uint256 totalMargin = pos.margin + received;
 
         if (pos.size != 0) {
             require(
@@ -134,7 +138,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpg
 
         if (_notional(pos) > totalMargin * MAX_LEVERAGE) revert ExceedsMaxLeverage();
 
-        emit PositionOpened(msg.sender, isLong, sizeAbs, price, marginAmount);
+        emit PositionOpened(msg.sender, isLong, sizeAbs, price, received);
     }
 
     function closePosition(uint256 sizeToClose) external nonReentrant {
@@ -164,6 +168,8 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpg
             pos.lastUpdatedAt = block.timestamp;
         }
 
+        uint256 balance = collateralToken.balanceOf(address(this));
+        if (balance < totalPayout) revert InsufficientLiquidity();
         emit PositionClosed(msg.sender, sizeToClose, exitPrice, pnl);
         if (!collateralToken.transfer(msg.sender, totalPayout)) revert TransferFailed();
     }
@@ -172,10 +178,13 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpg
         if (amount == 0) revert ZeroMargin();
         Position storage pos = positions[msg.sender];
         if (pos.size == 0) revert NoPosition();
+        uint256 balBefore = collateralToken.balanceOf(address(this));
         if (!collateralToken.transferFrom(msg.sender, address(this), amount)) revert TransferFailed();
-        pos.margin += amount;
+        uint256 received = collateralToken.balanceOf(address(this)) - balBefore;
+        if (received == 0) revert TransferFailed();
+        pos.margin += received;
         pos.lastUpdatedAt = block.timestamp;
-        emit MarginAdded(msg.sender, amount);
+        emit MarginAdded(msg.sender, received);
     }
 
     function removeMargin(uint256 amount) external nonReentrant {
@@ -205,6 +214,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpg
         pos.lastUpdatedAt = 0;
         _removePositionHolder(trader);
 
+        if (collateralToken.balanceOf(address(this)) < marginForLiquidator) revert InsufficientLiquidity();
         emit Liquidated(trader, msg.sender, sizeAbs, price);
         if (!collateralToken.transfer(msg.sender, marginForLiquidator)) revert TransferFailed();
     }
@@ -308,9 +318,11 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpg
             pos.lastUpdatedAt = 0;
             _removePositionHolder(traders[i]);
 
-            emit Liquidated(traders[i], msg.sender, sizeAbs, price);
-            if (collateralToken.transfer(msg.sender, marginForLiquidator)) {
-                successCount++;
+            if (collateralToken.balanceOf(address(this)) >= marginForLiquidator) {
+                emit Liquidated(traders[i], msg.sender, sizeAbs, price);
+                if (collateralToken.transfer(msg.sender, marginForLiquidator)) {
+                    successCount++;
+                }
             }
         }
         return successCount;
