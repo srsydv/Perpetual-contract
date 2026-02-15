@@ -11,7 +11,8 @@ const { ethers } = require("ethers");
 
 const MOCK_FEED_ADDRESS = process.env.MOCK_PRICE_FEED_ADDRESS || "0x8Ce022D3901FCc9C3944E00c612Dc5c5C7F7683F";
 const EXCHANGE_PROXY = process.env.PERPETUAL_EXCHANGE_PROXY || "0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330";
-const RPC_URL = process.env.SEPOLIA_RPC_URL || process.env.RPC_URL || "https://rpc.sepolia.org";
+// const RPC_URL = process.env.SEPOLIA_RPC_URL || process.env.RPC_URL || "https://rpc.sepolia.org";
+const RPC_URL = "https://eth-sepolia.g.alchemy.com/v2/rB2CQbcQlNubEmgJCgxDR"
 const INTERVAL_MS = 15000; // one update per block on Sepolia (~12s) + buffer
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -80,8 +81,8 @@ async function main() {
     try {
       const priceUsd = await getEthUsdPrice();
       const price8 = BigInt(Math.round(priceUsd * 1e8));
-      // Use confirmed nonce so we never stack; RPC in-flight limit is not hit
-      const nonce = await provider.getTransactionCount(wallet.address, "confirmed");
+      // Use latest nonce ("confirmed" not supported by all RPCs e.g. Alchemy); we wait for receipt so no stacking
+      const nonce = await provider.getTransactionCount(wallet.address, "latest");
       const tx = await mock.updateAnswer(price8, { nonce });
       const receipt = await tx.wait();
       if (receipt && receipt.status === 0) {

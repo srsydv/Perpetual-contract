@@ -29,7 +29,10 @@ export default function PriceChart() {
   const currentPrice = Number(markPrice);
   const minP = data.length ? Math.min(...data.map((d) => d.price)) : currentPrice;
   const maxP = data.length ? Math.max(...data.map((d) => d.price)) : currentPrice;
-  const pad = Math.max((maxP - minP) * 0.1, currentPrice * 0.002);
+  // Use a tight minimum range (~0.15%) so small price moves from the bot are visible on the chart
+  const minRange = currentPrice * 0.0015;
+  const range = Math.max(maxP - minP, minRange);
+  const pad = range * 0.1;
   const domain = [minP - pad, maxP + pad];
 
   if (data.length === 0) {

@@ -53,6 +53,9 @@ export const usePerpetual = () => {
       const priceNum = Number(priceStr);
       setMarkPrice(priceStr);
       setPriceHistory((prev) => {
+        // Only add a point when price changed so the chart shows steps (bot updates ~15s), not a flat line
+        const last = prev[prev.length - 1];
+        if (last != null && last.price === priceNum) return prev;
         const next = [...prev, { time: Date.now(), price: priceNum }];
         return next.length > MAX_PRICE_POINTS ? next.slice(-MAX_PRICE_POINTS) : next;
       });
