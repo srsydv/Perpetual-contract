@@ -173,8 +173,9 @@ export const usePerpetual = () => {
     return n;
   };
 
-  const PRICE_DECIMALS = 8n;
-  const MAX_LEVERAGE = 20n;
+  const PRICE_DECIMALS = BigInt(8);
+  const MAX_LEVERAGE = BigInt(20);
+  const TEN_8 = BigInt(10) ** BigInt(8);
 
   const openPosition = async (isLong: boolean, sizeAbs: string, marginAmount: string, leverage: number) => {
     if (!contract || !signer || !account) throw new Error('Wallet not connected');
@@ -201,19 +202,20 @@ export const usePerpetual = () => {
       const existingSize = pos[0];
       const entryPrice = pos[1];
       const existingMarginWei = pos[2];
+      const zero = BigInt(0);
       const sameDirection =
-        (isLong && existingSize > 0n) || (!isLong && existingSize < 0n);
-      if (sameDirection && existingSize !== 0n) {
-        const currentSizeAbs = existingSize < 0n ? -existingSize : existingSize;
-        const currentNotional = (currentSizeAbs * entryPrice) / (10n ** PRICE_DECIMALS);
-        const newNotional = (sizeWei * price) / (10n ** PRICE_DECIMALS);
+        (isLong && existingSize > zero) || (!isLong && existingSize < zero);
+      if (sameDirection && existingSize !== zero) {
+        const currentSizeAbs = existingSize < zero ? -existingSize : existingSize;
+        const currentNotional = (currentSizeAbs * entryPrice) / TEN_8;
+        const newNotional = (sizeWei * price) / TEN_8;
         const totalNotional = currentNotional + newNotional;
         const requiredTotalMarginWei = totalNotional / MAX_LEVERAGE;
         const marginToAddWei = requiredTotalMarginWei > existingMarginWei
           ? requiredTotalMarginWei - existingMarginWei
-          : 0n;
-        if (marginToAddWei > 0n) {
-          const marginToAddWithBuffer = (marginToAddWei * 120n) / 100n;
+          : zero;
+        if (marginToAddWei > zero) {
+          const marginToAddWithBuffer = (marginToAddWei * BigInt(120)) / BigInt(100);
           const marginFromBuffer = parseEther(marginWithBuffer);
           const marginWeiRequired = marginToAddWithBuffer > marginFromBuffer
             ? marginToAddWithBuffer
