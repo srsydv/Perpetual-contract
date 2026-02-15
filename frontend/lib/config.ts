@@ -5,11 +5,11 @@ export const CONFIG = {
   exchangeAddress:
     typeof process !== 'undefined' && process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
       ? process.env.NEXT_PUBLIC_CONTRACT_ADDRESS
-      : '0xD9312E5D56f3fb5f7ab7096c5F75E0bd4850d7Ff',
+      : '0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330',
   collateralTokenAddress:
     typeof process !== 'undefined' && process.env.NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS
       ? process.env.NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS
-      : '0xb43945aF94c0F4a59b7C55258270D96dcfb77Ed7',
+      : '0x799a5570318c0C5Fcfd09b0f573335B5aa8d85Ff',
   collateralSymbol: 'COLL',
   rpcUrl:
     typeof process !== 'undefined' && process.env.NEXT_PUBLIC_RPC_URL

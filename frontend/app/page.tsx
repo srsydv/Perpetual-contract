@@ -3,11 +3,10 @@
 import WalletButton from '@/components/WalletButton';
 import TradingPanel from '@/components/TradingPanel';
 import PositionCard from '@/components/PositionCard';
-import { usePerpetual } from '@/hooks/usePerpetual';
+import PriceChart from '@/components/PriceChart';
 import { useWallet } from '@/hooks/useWallet';
 
 export default function Home() {
-  const { markPrice } = usePerpetual();
   const { account, isCorrectNetwork } = useWallet();
 
   return (
@@ -31,13 +30,8 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mb-8 text-center">
-          <div className="inline-block bg-white/90 backdrop-blur rounded-2xl shadow-lg border border-slate-200/80 px-8 py-5">
-            <div className="text-sm text-slate-500 mb-1">ETH/USD Mark Price</div>
-            <div className="text-3xl sm:text-4xl font-bold text-slate-800 tabular-nums">
-              ${Number(markPrice).toFixed(2)}
-            </div>
-          </div>
+        <div className="mb-6">
+          <PriceChart />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

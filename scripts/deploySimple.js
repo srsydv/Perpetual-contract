@@ -3,7 +3,7 @@
 require("dotenv").config();
 const hre = require("hardhat");
 
-// Chainlink ETH/USD price feed addresses
+// Chainlink ETH/USD price feed addresses (only used if PRICE_FEED_ADDRESS and USE_MOCK_FEED are not set)
 const CHAINLINK_FEEDS = {
   mainnet: "0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419",
   sepolia: "0x694AA1769357215DE4FAC081bf1f309aDC325306",
@@ -43,19 +43,21 @@ async function main() {
     throw new Error("Insufficient balance. Get Sepolia ETH from faucet: https://sepoliafaucet.com/");
   }
 
-  // Get price feed address
-  let priceFeedAddress = CHAINLINK_FEEDS[network];
-  
-  // If no Chainlink feed for this network, deploy mock
-  if (!priceFeedAddress) {
-    console.log("No Chainlink feed for", network, "- deploying mock price feed...");
+  // Price feed: PRICE_FEED_ADDRESS (e.g. your MockAggregatorV3) > deploy mock on Sepolia/testnets > Chainlink on mainnet
+  const useMockByDefault = network === "sepolia" || process.env.USE_MOCK_FEED === "true";
+  let priceFeedAddress = process.env.PRICE_FEED_ADDRESS?.trim();
+  if (priceFeedAddress && priceFeedAddress !== "" && priceFeedAddress !== "0x0000000000000000000000000000000000000000") {
+    console.log("Using price feed from PRICE_FEED_ADDRESS:", priceFeedAddress);
+  } else if (useMockByDefault || !CHAINLINK_FEEDS[network]) {
+    console.log(network === "sepolia" ? "Sepolia: deploying MockAggregatorV3 (use PRICE_FEED_ADDRESS for your existing mock or Chainlink)." : "Deploying MockAggregatorV3...");
     const MockAggregator = await hre.ethers.getContractFactory("MockAggregatorV3");
-    const initialPrice = 3000 * 1e8; // $3000 with 8 decimals
+    const initialPrice = Number(process.env.MOCK_FEED_INITIAL_PRICE) || 3000 * 1e8; // $3000, 8 decimals
     const mockFeed = await MockAggregator.deploy(initialPrice);
     await mockFeed.waitForDeployment();
     priceFeedAddress = await mockFeed.getAddress();
     console.log("✅ Mock price feed deployed:", priceFeedAddress);
   } else {
+    priceFeedAddress = CHAINLINK_FEEDS[network];
     console.log("Using Chainlink feed:", priceFeedAddress);
   }
 

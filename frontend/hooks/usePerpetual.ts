@@ -14,11 +14,15 @@ const COLLATERAL_TOKEN_ADDRESS = CONFIG.collateralTokenAddress;
 export const usePerpetual = () => {
   const { account, provider, signer } = useWallet();
   const [markPrice, setMarkPrice] = useState<string>('0');
+  const [priceHistory, setPriceHistory] = useState<{ time: number; price: number }[]>([]);
+  const [priceLoadError, setPriceLoadError] = useState<string | null>(null);
   const [position, setPosition] = useState<any>(null);
   const [marginRatio, setMarginRatio] = useState<string>('0');
   const [isLiquidatable, setIsLiquidatable] = useState(false);
   const [collateralBalance, setCollateralBalance] = useState<string>('0');
   const [loading, setLoading] = useState(false);
+
+  const MAX_PRICE_POINTS = 120; // ~6 min at 3s interval
 
   const contract = signer 
     ? getPerpetualExchange(CONTRACT_ADDRESS, signer)
@@ -35,10 +39,19 @@ export const usePerpetual = () => {
   const fetchMarkPrice = useCallback(async () => {
     if (!contract) return;
     try {
+      setPriceLoadError(null);
       const price = await contract.getMarkPrice();
-      setMarkPrice(formatUnits(price, 8)); // Chainlink uses 8 decimals
-    } catch (error) {
+      const priceStr = formatUnits(price, 8);
+      const priceNum = Number(priceStr);
+      setMarkPrice(priceStr);
+      setPriceHistory((prev) => {
+        const next = [...prev, { time: Date.now(), price: priceNum }];
+        return next.length > MAX_PRICE_POINTS ? next.slice(-MAX_PRICE_POINTS) : next;
+      });
+    } catch (error: any) {
       console.error('Error fetching mark price:', error);
+      const msg = error?.reason || error?.message || '';
+      setPriceLoadError(msg.includes('StalePrice') ? 'stale' : 'error');
     }
   }, [contract]);
 
@@ -84,7 +97,7 @@ export const usePerpetual = () => {
   useEffect(() => {
     if (contract) {
       fetchMarkPrice();
-      const interval = setInterval(fetchMarkPrice, 10000); // Update every 10 seconds
+      const interval = setInterval(fetchMarkPrice, 3000); // 3s for live chart + trading
       return () => clearInterval(interval);
     }
   }, [contract, fetchMarkPrice]);
@@ -249,6 +262,8 @@ export const usePerpetual = () => {
 
   return {
     markPrice,
+    priceHistory,
+    priceLoadError,
     position,
     marginRatio,
     isLiquidatable,
