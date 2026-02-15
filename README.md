@@ -1,1 +1,7 @@
 # Perpetual-contract
+
+PerpetualExchange (proxy, use this): 0xD9312E5D56f3fb5f7ab7096c5F75E0bd4850d7Ff
+PerpetualExchange (implementation, for verify): 0x8871CdEeccD43D570dF8502422eCCF00cfD1E5F2
+Price Feed: 0x694AA1769357215DE4FAC081bf1f309aDC325306
+Collateral Token: 0xb43945aF94c0F4a59b7C55258270D96dcfb77Ed7
+Owner: 0xf69F75EB0c72171AfF58D79973819B6A3038f39f

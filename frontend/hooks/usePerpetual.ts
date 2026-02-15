@@ -5,10 +5,11 @@ import { ethers } from 'ethers';
 import { getPerpetualExchange, getERC20 } from '@/lib/contracts';
 import { formatEther, parseEther, formatUnits } from 'ethers';
 import { useWallet } from './useWallet';
+import { CONFIG } from '@/lib/config';
 import toast from 'react-hot-toast';
 
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS!;
-const COLLATERAL_TOKEN_ADDRESS = process.env.NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS!;
+const CONTRACT_ADDRESS = CONFIG.exchangeAddress;
+const COLLATERAL_TOKEN_ADDRESS = CONFIG.collateralTokenAddress;
 
 export const usePerpetual = () => {
   const { account, provider, signer } = useWallet();
@@ -48,8 +49,17 @@ export const usePerpetual = () => {
       const ratio = await contract.getMarginRatio(account);
       const liquidatable = await contract.isLiquidatable(account);
       
+      if (size === BigInt(0)) {
+        setPosition(null);
+        setMarginRatio('0');
+        setIsLiquidatable(false);
+        return;
+      }
+      const sizeFormatted = formatEther(size >= BigInt(0) ? size : -size);
       setPosition({
-        size: size.toString(),
+        size: sizeFormatted,
+        sizeRaw: size.toString(),
+        isLong: size >= BigInt(0),
         entryPrice: formatUnits(entryPrice, 8),
         margin: formatEther(margin),
         lastUpdatedAt: lastUpdatedAt.toString(),

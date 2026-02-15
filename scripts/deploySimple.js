@@ -1,17 +1,4 @@
-/**
- * Simple deployment script for PerpetualExchange
- * 
- * Automatically deploys MockERC20 collateral token if not provided.
- * 
- * Usage:
- *   PRIVATE_KEY=0x... npx hardhat run scripts/deploySimple.js --network sepolia
- * 
- * Or with existing collateral token:
- *   PRIVATE_KEY=0x... COLLATERAL_TOKEN_ADDRESS=0x... npx hardhat run scripts/deploySimple.js --network sepolia
- * 
- * For local testing (auto-deploys mock price feed and collateral token):
- *   npx hardhat run scripts/deploySimple.js
- */
+
 
 require("dotenv").config();
 const hre = require("hardhat");
@@ -107,10 +94,12 @@ async function main() {
   const exchange = PerpetualExchange.attach(await proxy.getAddress());
   const exchangeAddress = await exchange.getAddress();
 
+  const implAddress = await impl.getAddress();
   console.log("\n" + "=".repeat(60));
   console.log("✅ DEPLOYMENT SUCCESSFUL");
   console.log("=".repeat(60));
-  console.log("PerpetualExchange:", exchangeAddress);
+  console.log("PerpetualExchange (proxy, use this):", exchangeAddress);
+  console.log("PerpetualExchange (implementation, for verify):", implAddress);
   console.log("Price Feed:", priceFeedAddress);
   console.log("Collateral Token:", collateralTokenAddress);
   console.log("Owner:", deployer.address);
@@ -119,6 +108,8 @@ async function main() {
     console.log("\nView on Etherscan:");
     const explorer = network === "mainnet" ? "etherscan.io" : "sepolia.etherscan.io";
     console.log(`https://${explorer}/address/${exchangeAddress}`);
+    console.log("\nVerify implementation:");
+    console.log(`  npx hardhat verify --network ${network} ${implAddress}`);
   }
   console.log("=".repeat(60));
 }

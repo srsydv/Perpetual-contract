@@ -3,19 +3,18 @@
 @tailwind utilities;
 
 :root {
-  --foreground-rgb: 0, 0, 0;
-  --background-start-rgb: 214, 219, 220;
-  --background-end-rgb: 255, 255, 255;
+  --bg: 248 250 252;
+  --card: 255 255 255;
+  --muted: 100 116 139;
+  --accent: 2 6 23;
+  --green: 5 150 105;
+  --red: 185 28 28;
 }
 
 body {
-  color: rgb(var(--foreground-rgb));
-  background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(var(--background-end-rgb))
-    )
-    rgb(var(--background-start-rgb));
+  @apply antialiased text-slate-800;
+  background: linear-gradient(160deg, rgb(241 245 249) 0%, rgb(226 232 240) 50%, rgb(248 250 252) 100%);
+  min-height: 100vh;
 }
 
 @layer utilities {

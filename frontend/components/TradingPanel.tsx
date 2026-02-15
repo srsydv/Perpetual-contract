@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { usePerpetual } from '@/hooks/usePerpetual';
-import { parseEther, formatEther } from 'ethers';
+import { parseEther } from 'ethers';
 
 export default function TradingPanel() {
   const {
@@ -62,127 +62,112 @@ export default function TradingPanel() {
   };
 
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6">
-      <h2 className="text-2xl font-bold mb-6">Open Position</h2>
+    <div className="bg-white rounded-2xl shadow-lg border border-slate-200/80 p-6">
+      <h2 className="text-xl font-bold mb-6 text-slate-800">Open Position</h2>
 
-      {/* Long/Short Toggle */}
       <div className="flex gap-2 mb-6">
         <button
           onClick={() => setIsLong(true)}
-          className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${
+          className={`flex-1 py-3 rounded-xl font-semibold transition-colors ${
             isLong
-              ? 'bg-green-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              ? 'bg-emerald-600 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           }`}
         >
           Long
         </button>
         <button
           onClick={() => setIsLong(false)}
-          className={`flex-1 py-3 rounded-lg font-semibold transition-colors ${
+          className={`flex-1 py-3 rounded-xl font-semibold transition-colors ${
             !isLong
-              ? 'bg-red-500 text-white'
-              : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+              ? 'bg-red-600 text-white shadow-sm'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
           }`}
         >
           Short
         </button>
       </div>
 
-      {/* Current Price */}
-      <div className="mb-4 p-4 bg-gray-50 rounded-lg">
-        <div className="text-sm text-gray-600">Mark Price</div>
-        <div className="text-2xl font-bold">${Number(markPrice).toFixed(2)}</div>
+      <div className="mb-4 p-4 bg-slate-50 rounded-xl">
+        <div className="text-sm text-slate-500">Mark Price</div>
+        <div className="text-2xl font-bold text-slate-800 tabular-nums">${Number(markPrice).toFixed(2)}</div>
       </div>
 
-      {/* Position Size */}
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2">Position Size (ETH)</label>
+        <label className="block text-sm font-medium mb-2 text-slate-700">Position size (ETH)</label>
         <input
           type="number"
           value={size}
           onChange={(e) => setSize(e.target.value)}
           placeholder="0.0"
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 bg-white"
         />
         {maxSize && (
-          <div className="text-xs text-gray-500 mt-1">
-            Max: {Number(maxSize).toFixed(4)} ETH
-          </div>
+          <div className="text-xs text-slate-500 mt-1">Max: {Number(maxSize).toFixed(4)} ETH</div>
         )}
       </div>
 
-      {/* Leverage */}
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2">
-          Leverage: {leverage}x
-        </label>
+        <label className="block text-sm font-medium mb-2 text-slate-700">Leverage: {leverage}x</label>
         <input
           type="range"
           min="1"
           max="20"
           value={leverage}
           onChange={(e) => setLeverage(Number(e.target.value))}
-          className="w-full"
+          className="w-full h-2 rounded-lg appearance-none bg-slate-200 accent-emerald-600"
         />
-        <div className="flex justify-between text-xs text-gray-500 mt-1">
+        <div className="flex justify-between text-xs text-slate-500 mt-1">
           <span>1x</span>
           <span>20x</span>
         </div>
       </div>
 
-      {/* Margin */}
       <div className="mb-4">
-        <label className="block text-sm font-medium mb-2">Margin Amount</label>
+        <label className="block text-sm font-medium mb-2 text-slate-700">Margin (COLL)</label>
         <input
           type="number"
           value={margin}
           onChange={(e) => setMargin(e.target.value)}
           placeholder="0.0"
-          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 bg-white"
         />
         <div className="flex gap-2 mt-2">
           {[10, 25, 50, 100].map((percent) => (
             <button
               key={percent}
               onClick={() => setPercentage(percent)}
-              className="flex-1 px-3 py-1 text-xs bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+              className="flex-1 px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-slate-700"
             >
               {percent}%
             </button>
           ))}
         </div>
-        <div className="text-xs text-gray-500 mt-1">
-          Balance: {Number(collateralBalance).toFixed(4)} USDC
+        <div className="text-xs text-slate-500 mt-1">
+          Balance: {Number(collateralBalance).toFixed(4)} COLL
         </div>
         {requiredMargin && (
-          <div className="text-xs text-blue-600 mt-1">
-            Required: {Number(requiredMargin).toFixed(4)} USDC
-          </div>
+          <div className="text-xs text-emerald-600 mt-1">Required: {Number(requiredMargin).toFixed(4)} COLL</div>
         )}
       </div>
 
-      {/* Notional Value */}
       {size && markPrice && (
-        <div className="mb-4 p-3 bg-blue-50 rounded-lg">
-          <div className="text-sm text-gray-600">Notional Value</div>
-          <div className="text-lg font-semibold">
+        <div className="mb-4 p-3 bg-slate-50 rounded-xl">
+          <div className="text-sm text-slate-500">Notional</div>
+          <div className="text-lg font-semibold text-slate-800 tabular-nums">
             ${(Number(size) * Number(markPrice)).toFixed(2)}
           </div>
         </div>
       )}
 
-      {/* Open Position Button */}
       <button
         onClick={handleOpenPosition}
         disabled={loading || !size || !margin}
-        className={`w-full py-3 rounded-lg font-semibold text-white transition-colors ${
-          isLong
-            ? 'bg-green-500 hover:bg-green-600'
-            : 'bg-red-500 hover:bg-red-600'
-        } disabled:opacity-50 disabled:cursor-not-allowed`}
+        className={`w-full py-3 rounded-xl font-semibold text-white transition-colors ${
+          isLong ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'
+        } disabled:opacity-50 disabled:cursor-not-allowed shadow-sm`}
       >
-        {loading ? 'Processing...' : `Open ${isLong ? 'Long' : 'Short'} Position`}
+        {loading ? 'Processing...' : `Open ${isLong ? 'Long' : 'Short'}`}
       </button>
     </div>
   );

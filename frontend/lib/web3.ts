@@ -1,4 +1,5 @@
 import { ethers } from 'ethers';
+import { CONFIG } from '@/lib/config';
 
 declare global {
   interface Window {
@@ -7,15 +8,13 @@ declare global {
 }
 
 export const connectWallet = async () => {
-  if (!window.ethereum) {
+  if (typeof window === 'undefined' || !window.ethereum) {
     throw new Error('MetaMask is not installed');
   }
-
   const provider = new ethers.BrowserProvider(window.ethereum);
   await provider.send('eth_requestAccounts', []);
   const signer = await provider.getSigner();
   const address = await signer.getAddress();
-  
   return { provider, signer, address };
 };
 
@@ -23,8 +22,7 @@ export const getProvider = () => {
   if (typeof window !== 'undefined' && window.ethereum) {
     return new ethers.BrowserProvider(window.ethereum);
   }
-  // Fallback to public RPC
-  return new ethers.JsonRpcProvider(process.env.NEXT_PUBLIC_RPC_URL || 'https://rpc.sepolia.org');
+  return new ethers.JsonRpcProvider(CONFIG.rpcUrl);
 };
 
 export const formatEther = (value: bigint) => {
