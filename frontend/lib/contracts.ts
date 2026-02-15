@@ -40,6 +40,15 @@ export const getPerpetualExchange = (address: string, signerOrProvider: ethers.P
   return getContract(address, PERPETUAL_EXCHANGE_ABI, signerOrProvider);
 };
 
+export const MOCK_AGGREGATOR_ABI = [
+  'function updateAnswer(int256 newAnswer) external',
+  'function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)',
+];
+
 export const getERC20 = (address: string, signerOrProvider: ethers.Provider | ethers.Signer) => {
   return getContract(address, ERC20_ABI, signerOrProvider);
+};
+
+export const getMockPriceFeed = (address: string, signerOrProvider: ethers.Provider | ethers.Signer) => {
+  return getContract(address, MOCK_AGGREGATOR_ABI, signerOrProvider);
 };

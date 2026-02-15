@@ -4,6 +4,7 @@ import WalletButton from '@/components/WalletButton';
 import TradingPanel from '@/components/TradingPanel';
 import PositionCard from '@/components/PositionCard';
 import PriceChart from '@/components/PriceChart';
+import MockPriceTester from '@/components/MockPriceTester';
 import { useWallet } from '@/hooks/useWallet';
 
 export default function Home() {
@@ -32,6 +33,10 @@ export default function Home() {
 
         <div className="mb-6">
           <PriceChart />
+        </div>
+
+        <div className="mb-6">
+          <MockPriceTester />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
