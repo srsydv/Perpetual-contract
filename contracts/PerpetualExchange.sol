@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import { AggregatorV3Interface } from "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import { Initializable } from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import { UUPSUpgradeable } from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import { ReentrancyGuardUpgradeable } from "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 
 interface IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
@@ -11,7 +12,7 @@ interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
 }
 
-contract PerpetualExchange is Initializable, UUPSUpgradeable {
+contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpgradeable {
     AggregatorV3Interface public priceFeed;
     IERC20 public collateralToken;
 
@@ -68,6 +69,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable {
         if (_priceFeed == address(0)) revert InvalidPriceFeed();
         if (_collateralToken == address(0)) revert InvalidCollateralToken();
         __UUPSUpgradeable_init();
+        __ReentrancyGuard_init();
         owner = msg.sender;
         priceFeed = AggregatorV3Interface(_priceFeed);
         collateralToken = IERC20(_collateralToken);
@@ -98,7 +100,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable {
         return uint256(answer);
     }
 
-    function openPosition(bool isLong, uint256 sizeAbs, uint256 marginAmount) external {
+    function openPosition(bool isLong, uint256 sizeAbs, uint256 marginAmount) external nonReentrant {
         if (sizeAbs == 0) revert ZeroSize();
         if (marginAmount == 0) revert ZeroMargin();
 
@@ -135,7 +137,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable {
         emit PositionOpened(msg.sender, isLong, sizeAbs, price, marginAmount);
     }
 
-    function closePosition(uint256 sizeToClose) external {
+    function closePosition(uint256 sizeToClose) external nonReentrant {
         Position storage pos = positions[msg.sender];
         if (pos.size == 0) revert NoPosition();
         uint256 sizeAbs = _abs(pos.size);
@@ -166,7 +168,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable {
         if (!collateralToken.transfer(msg.sender, totalPayout)) revert TransferFailed();
     }
 
-    function addMargin(uint256 amount) external {
+    function addMargin(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroMargin();
         Position storage pos = positions[msg.sender];
         if (pos.size == 0) revert NoPosition();
@@ -176,7 +178,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable {
         emit MarginAdded(msg.sender, amount);
     }
 
-    function removeMargin(uint256 amount) external {
+    function removeMargin(uint256 amount) external nonReentrant {
         Position storage pos = positions[msg.sender];
         if (pos.size == 0) revert NoPosition();
         pos.margin -= amount;
@@ -189,7 +191,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable {
     /**
      * @notice Liquidate a position that is below maintenance margin.
      */
-    function liquidate(address trader) external {
+    function liquidate(address trader) external nonReentrant {
         Position storage pos = positions[trader];
         if (pos.size == 0) revert NoPosition();
         if (_marginRatio(pos) >= MAINTENANCE_MARGIN_BPS) revert PositionNotLiquidatable();
@@ -289,7 +291,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable {
     }
 
 
-    function liquidateBatch(address[] calldata traders) external returns (uint256 successCount) {
+    function liquidateBatch(address[] calldata traders) external nonReentrant returns (uint256 successCount) {
         for (uint256 i = 0; i < traders.length; i++) {
             Position storage pos = positions[traders[i]];
             if (pos.size == 0) continue;
