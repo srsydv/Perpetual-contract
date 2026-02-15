@@ -199,16 +199,17 @@ export const usePerpetual = () => {
         contract.getPosition(account),
         contract.getMarkPrice(),
       ]);
-      const existingSize = pos[0];
-      const entryPrice = pos[1];
-      const existingMarginWei = pos[2];
+      const existingSize = BigInt(pos[0].toString());
+      const entryPrice = BigInt(pos[1].toString());
+      const existingMarginWei = BigInt(pos[2].toString());
+      const priceBn = BigInt(price.toString());
       const zero = BigInt(0);
       const sameDirection =
         (isLong && existingSize > zero) || (!isLong && existingSize < zero);
       if (sameDirection && existingSize !== zero) {
         const currentSizeAbs = existingSize < zero ? -existingSize : existingSize;
         const currentNotional = (currentSizeAbs * entryPrice) / TEN_8;
-        const newNotional = (sizeWei * price) / TEN_8;
+        const newNotional = (sizeWei * priceBn) / TEN_8;
         const totalNotional = currentNotional + newNotional;
         const requiredTotalMarginWei = totalNotional / MAX_LEVERAGE;
         const marginToAddWei = requiredTotalMarginWei > existingMarginWei
