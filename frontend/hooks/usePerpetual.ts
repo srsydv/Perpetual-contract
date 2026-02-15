@@ -175,7 +175,7 @@ export const usePerpetual = () => {
 
   const PRICE_DECIMALS = BigInt(8);
   const MAX_LEVERAGE = BigInt(20);
-  const TEN_8 = BigInt(10) ** BigInt(8);
+  const TEN_8 = BigInt(100000000); // 10^8, price feed decimals
 
   const openPosition = async (isLong: boolean, sizeAbs: string, marginAmount: string, leverage: number) => {
     if (!contract || !signer || !account) throw new Error('Wallet not connected');
