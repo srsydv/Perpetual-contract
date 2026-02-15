@@ -44,10 +44,10 @@ export default function MockPriceTester() {
 
   return (
     <details className="bg-slate-100 border border-slate-200 rounded-xl overflow-hidden">
-      <summary className="px-4 py-2.5 cursor-pointer text-sm font-medium text-slate-600 hover:bg-slate-200/50">
+      <summary className="px-3 sm:px-4 py-3 min-h-[44px] cursor-pointer text-xs sm:text-sm font-medium text-slate-600 hover:bg-slate-200/50 active:bg-slate-200/70 touch-manipulation flex items-center">
         Testing: update mock price manually
       </summary>
-      <div className="px-4 py-3 border-t border-slate-200 flex flex-wrap items-end gap-3">
+      <div className="px-3 sm:px-4 py-3 border-t border-slate-200 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-xs text-slate-500 mb-1">ETH/USD price ($)</label>
           <input
@@ -57,19 +57,19 @@ export default function MockPriceTester() {
             value={priceInput}
             onChange={(e) => setPriceInput(e.target.value)}
             placeholder="e.g. 2100"
-            className="w-28 px-3 py-1.5 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
+            className="w-24 sm:w-28 px-3 py-2 min-h-[44px] border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500"
           />
         </div>
         <button
           type="button"
           onClick={handleUpdatePrice}
           disabled={loading}
-          className="px-4 py-1.5 text-sm font-medium bg-slate-600 text-white rounded-lg hover:bg-slate-700 disabled:opacity-50"
+          className="min-h-[44px] px-4 py-2 text-sm font-medium bg-slate-600 text-white rounded-lg hover:bg-slate-700 active:bg-slate-800 disabled:opacity-50 touch-manipulation"
         >
           {loading ? 'Updating…' : 'Update price'}
         </button>
-        <p className="text-xs text-slate-500 w-full mt-1">
-          Updates the mock feed at {CONFIG.priceFeedAddress.slice(0, 10)}… so the chart and mark price refresh. For testing only.
+        <p className="text-xs text-slate-500 w-full mt-1 break-words">
+          Updates mock feed at {CONFIG.priceFeedAddress.slice(0, 10)}… For testing only.
         </p>
       </div>
     </details>

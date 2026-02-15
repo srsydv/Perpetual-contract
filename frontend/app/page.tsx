@@ -5,6 +5,7 @@ import TradingPanel from '@/components/TradingPanel';
 import PositionCard from '@/components/PositionCard';
 import PriceChart from '@/components/PriceChart';
 import MockPriceTester from '@/components/MockPriceTester';
+import MintCollateral from '@/components/MintCollateral';
 import { useWallet } from '@/hooks/useWallet';
 
 export default function Home() {
@@ -12,34 +13,35 @@ export default function Home() {
 
   return (
     <main className="min-h-screen">
-      <header className="bg-white/80 backdrop-blur border-b border-slate-200/80 sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">Perpetual Exchange</h1>
-              <p className="text-sm text-slate-500">ETH/USD · Sepolia</p>
+      <header className="bg-white/80 backdrop-blur border-b border-slate-200/80 sticky top-0 z-10 pl-[env(safe-area-inset-left)]">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex justify-between items-center gap-2 min-h-[44px]">
+            <div className="min-w-0">
+              <h1 className="text-lg sm:text-2xl font-bold text-slate-900 tracking-tight truncate">Perpetual Exchange</h1>
+              <p className="text-xs sm:text-sm text-slate-500">ETH/USD · Sepolia</p>
             </div>
             <WalletButton />
           </div>
         </div>
       </header>
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {account && !isCorrectNetwork && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-center">
             Please switch to Sepolia in your wallet to trade.
           </div>
         )}
 
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6">
           <PriceChart />
         </div>
 
-        <div className="mb-6">
+        <div className="mb-4 sm:mb-6 space-y-3">
+          <MintCollateral />
           <MockPriceTester />
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           <div>
             <TradingPanel />
           </div>
@@ -48,9 +50,9 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-8 bg-white/90 backdrop-blur rounded-2xl shadow-lg border border-slate-200/80 p-6">
-          <h3 className="text-lg font-bold mb-4 text-slate-800">How it works</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="mt-6 sm:mt-8 bg-white/90 backdrop-blur rounded-2xl shadow-lg border border-slate-200/80 p-4 sm:p-6">
+          <h3 className="text-base sm:text-lg font-bold mb-3 sm:mb-4 text-slate-800">How it works</h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6">
             <div>
               <div className="font-semibold mb-2 text-slate-700">1. Connect & approve</div>
               <p className="text-sm text-slate-600">
@@ -72,12 +74,12 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-6 bg-amber-50/80 border border-amber-200 rounded-xl p-4">
-          <div className="flex items-start gap-3">
-            <span className="text-amber-600 text-lg">⚠️</span>
-            <div>
-              <div className="font-semibold text-amber-900 mb-1">Risk warning</div>
-              <p className="text-sm text-amber-800">
+        <div className="mt-4 sm:mt-6 bg-amber-50/80 border border-amber-200 rounded-xl p-3 sm:p-4">
+          <div className="flex items-start gap-2 sm:gap-3">
+            <span className="text-amber-600 text-base sm:text-lg shrink-0">⚠️</span>
+            <div className="min-w-0">
+              <div className="font-semibold text-amber-900 mb-1 text-sm sm:text-base">Risk warning</div>
+              <p className="text-xs sm:text-sm text-amber-800">
                 Perpetual trading is risky. Positions can be liquidated if margin ratio falls below 5%. 
                 Use only funds you can afford to lose. Max leverage 20x.
               </p>

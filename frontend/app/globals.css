@@ -11,10 +11,29 @@
   --red: 185 28 28;
 }
 
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   @apply antialiased text-slate-800;
   background: linear-gradient(160deg, rgb(241 245 249) 0%, rgb(226 232 240) 50%, rgb(248 250 252) 100%);
   min-height: 100vh;
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* Prevent zoom on input focus on iOS (min 16px) */
+input[type="number"],
+input[type="text"] {
+  font-size: 16px;
+}
+@media (min-width: 640px) {
+  input[type="number"],
+  input[type="text"] {
+    font-size: inherit;
+  }
 }
 
 @layer utilities {

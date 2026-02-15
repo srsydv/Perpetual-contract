@@ -10,6 +10,13 @@ export const metadata: Metadata = {
   description: 'Trade ETH/USD perpetual futures with up to 20x leverage on Sepolia',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: '#0f172a',
+};
+
 export default function RootLayout({
   children,
 }: {

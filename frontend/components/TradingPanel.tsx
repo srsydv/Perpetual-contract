@@ -102,37 +102,39 @@ export default function TradingPanel() {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-slate-200/80 p-6">
-      <h2 className="text-xl font-bold mb-6 text-slate-800">Open Position</h2>
+    <div className="bg-white rounded-2xl shadow-lg border border-slate-200/80 p-4 sm:p-6">
+      <h2 className="text-lg sm:text-xl font-bold mb-4 sm:mb-6 text-slate-800">Open Position</h2>
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex gap-2 mb-4 sm:mb-6">
         <button
           onClick={() => setIsLong(true)}
-          className={`flex-1 py-3 rounded-xl font-semibold transition-colors ${
+          type="button"
+          className={`flex-1 min-h-[48px] py-3 rounded-xl font-semibold transition-colors touch-manipulation ${
             isLong
               ? 'bg-emerald-600 text-white shadow-sm'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
           }`}
         >
           Long
         </button>
         <button
           onClick={() => setIsLong(false)}
-          className={`flex-1 py-3 rounded-xl font-semibold transition-colors ${
+          type="button"
+          className={`flex-1 min-h-[48px] py-3 rounded-xl font-semibold transition-colors touch-manipulation ${
             !isLong
               ? 'bg-red-600 text-white shadow-sm'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300'
           }`}
         >
           Short
         </button>
       </div>
 
-      <div className="mb-4 p-4 bg-slate-50 rounded-xl">
-        <div className="text-sm text-slate-500">Mark Price</div>
+      <div className="mb-4 p-3 sm:p-4 bg-slate-50 rounded-xl">
+        <div className="text-xs sm:text-sm text-slate-500">Mark Price</div>
         {priceLoadError ? (
           <>
-            <div className="text-lg font-semibold text-amber-700">
+            <div className="text-base sm:text-lg font-semibold text-amber-700">
               {priceLoadError === 'stale' ? 'Feed stale' : 'Price unavailable'}
             </div>
             <p className="text-xs text-slate-600 mt-1">
@@ -140,7 +142,7 @@ export default function TradingPanel() {
             </p>
           </>
         ) : (
-          <div className="text-2xl font-bold text-slate-800 tabular-nums">${Number(markPrice).toFixed(2)}</div>
+          <div className="text-xl sm:text-2xl font-bold text-slate-800 tabular-nums">${Number(markPrice).toFixed(2)}</div>
         )}
       </div>
 
@@ -166,7 +168,7 @@ export default function TradingPanel() {
           max="20"
           value={leverage}
           onChange={(e) => setLeverage(Number(e.target.value))}
-          className="w-full h-2 rounded-lg appearance-none bg-slate-200 accent-emerald-600"
+          className="w-full h-3 sm:h-2 rounded-lg appearance-none bg-slate-200 accent-emerald-600 touch-manipulation"
         />
         <div className="flex justify-between text-xs text-slate-500 mt-1">
           <span>1x</span>
@@ -184,12 +186,13 @@ export default function TradingPanel() {
           placeholder="0.0"
           className="w-full px-4 py-2.5 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 bg-white"
         />
-        <div className="flex gap-2 mt-2">
+        <div className="flex flex-wrap gap-2 mt-2">
           {[10, 25, 50, 100].map((percent) => (
             <button
               key={percent}
+              type="button"
               onClick={() => setPercentage(percent)}
-              className="flex-1 px-3 py-1.5 text-xs font-medium bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors text-slate-700"
+              className="min-h-[44px] flex-1 min-w-[60px] px-3 py-2 text-xs sm:text-sm font-medium bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-lg transition-colors text-slate-700 touch-manipulation"
             >
               {percent}%
             </button>
@@ -213,10 +216,11 @@ export default function TradingPanel() {
       )}
 
       <button
+        type="button"
         onClick={handleOpenPosition}
         disabled={!canOpen}
-        className={`w-full py-3 rounded-xl font-semibold text-white transition-colors ${
-          isLong ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-red-600 hover:bg-red-700'
+        className={`w-full min-h-[48px] py-3 rounded-xl font-semibold text-white transition-colors touch-manipulation ${
+          isLong ? 'bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800' : 'bg-red-600 hover:bg-red-700 active:bg-red-800'
         } disabled:opacity-50 disabled:cursor-not-allowed shadow-sm`}
       >
         {loading

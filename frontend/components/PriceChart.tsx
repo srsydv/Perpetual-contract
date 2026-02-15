@@ -37,12 +37,12 @@ export default function PriceChart() {
 
   if (data.length === 0) {
     return (
-      <div className="bg-white rounded-2xl shadow-lg border border-slate-200/80 p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-bold text-slate-800">ETH/USD Mark Price</h2>
-          <span className="text-sm text-slate-500">From contract · updates every 3s</span>
+      <div className="bg-white rounded-2xl shadow-lg border border-slate-200/80 p-4 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-4">
+          <h2 className="text-base sm:text-lg font-bold text-slate-800">ETH/USD Mark Price</h2>
+          <span className="text-xs sm:text-sm text-slate-500">From contract · updates every 3s</span>
         </div>
-        <div className="h-[280px] flex flex-col items-center justify-center text-slate-600 bg-slate-50 rounded-xl px-4">
+        <div className="h-[220px] sm:h-[280px] flex flex-col items-center justify-center text-slate-600 bg-slate-50 rounded-xl px-3 sm:px-4">
           {priceLoadError === 'stale' || priceLoadError === 'error' ? (
             <>
               <p className="font-medium text-amber-700 mb-2">
@@ -72,15 +72,15 @@ export default function PriceChart() {
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-lg border border-slate-200/80 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-bold text-slate-800">ETH/USD Mark Price</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-500">Live from contract</span>
-          <span className="text-xl font-bold text-slate-800 tabular-nums">${currentPrice.toFixed(2)}</span>
+    <div className="bg-white rounded-2xl shadow-lg border border-slate-200/80 p-4 sm:p-6 overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-0 mb-4">
+        <h2 className="text-base sm:text-lg font-bold text-slate-800">ETH/USD Mark Price</h2>
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <span className="text-xs sm:text-sm text-slate-500">Live from contract</span>
+          <span className="text-lg sm:text-xl font-bold text-slate-800 tabular-nums">${currentPrice.toFixed(2)}</span>
         </div>
       </div>
-      <div className="h-[280px] w-full">
+      <div className="h-[220px] sm:h-[280px] w-full min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={data}
@@ -132,8 +132,8 @@ export default function PriceChart() {
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <p className="text-xs text-slate-400 mt-2">
-        Chart built from contract getMarkPrice() every 3s · same price used for opening/closing positions
+      <p className="text-xs text-slate-400 mt-2 break-words">
+        Chart from getMarkPrice() every 3s · same price for open/close
       </p>
     </div>
   );

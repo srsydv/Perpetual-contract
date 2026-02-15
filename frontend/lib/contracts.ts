@@ -45,8 +45,17 @@ export const MOCK_AGGREGATOR_ABI = [
   'function latestRoundData() external view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)',
 ];
 
+export const MOCK_ERC20_MINT_ABI = [
+  ...ERC20_ABI,
+  'function mint(address to, uint256 amount) external',
+];
+
 export const getERC20 = (address: string, signerOrProvider: ethers.Provider | ethers.Signer) => {
   return getContract(address, ERC20_ABI, signerOrProvider);
+};
+
+export const getMockCollateral = (address: string, signerOrProvider: ethers.Provider | ethers.Signer) => {
+  return getContract(address, MOCK_ERC20_MINT_ABI, signerOrProvider);
 };
 
 export const getMockPriceFeed = (address: string, signerOrProvider: ethers.Provider | ethers.Signer) => {
