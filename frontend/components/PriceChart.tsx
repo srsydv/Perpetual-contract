@@ -18,7 +18,7 @@ function formatTime(ts: number) {
 }
 
 export default function PriceChart() {
-  const { markPrice, priceHistory, priceLoadError } = usePerpetual();
+  const { markPrice, priceHistory, priceLoadError, hasContract } = usePerpetual();
 
   const data = priceHistory.map(({ time, price }) => ({
     time,
@@ -40,20 +40,28 @@ export default function PriceChart() {
           <span className="text-sm text-slate-500">From contract · updates every 3s</span>
         </div>
         <div className="h-[280px] flex flex-col items-center justify-center text-slate-600 bg-slate-50 rounded-xl px-4">
-          {priceLoadError === 'stale' ? (
+          {priceLoadError === 'stale' || priceLoadError === 'error' ? (
             <>
-              <p className="font-medium text-amber-700 mb-2">Price feed is stale (older than 1 hour)</p>
-              <p className="text-sm text-center max-w-md">
-                If you use MockAggregatorV3, run once per hour:{" "}
-                <code className="bg-slate-200 px-1.5 py-0.5 rounded text-xs break-all">
-                  npx hardhat run scripts/updateMockPrice.js --network sepolia
-                </code>
+              <p className="font-medium text-amber-700 mb-2">
+                {priceLoadError === 'stale' ? 'Price feed is stale' : 'Could not load price'}
+              </p>
+              <p className="text-sm text-center max-w-md mb-2">
+                Run the price feed bot from project root so the contract’s mock is updated within 1 hour:
+              </p>
+              <p className="text-xs text-center text-slate-500 max-w-md">
+                <code className="bg-slate-200 px-1 py-0.5 rounded">node scripts/priceFeedBot.js</code>
+              </p>
+              <p className="text-xs text-center text-slate-500 max-w-md mt-1">
+                If the bot is already running, check its console for “Exchange proxy uses this feed: OK”. If it says WARNING, set MOCK_PRICE_FEED_ADDRESS in .env to the feed the exchange uses.
               </p>
             </>
-          ) : priceLoadError ? (
-            <p className="text-center">Could not load price. Check console and network (Sepolia).</p>
+          ) : !hasContract ? (
+            <p className="text-center">Connecting to Sepolia… Refresh the page if this persists.</p>
           ) : (
-            <p>Loading price from contract...</p>
+            <>
+              <p className="mb-2">Loading price from contract…</p>
+              <p className="text-xs text-slate-600">No price? Run <code className="bg-slate-200 px-1 py-0.5 rounded">node scripts/priceFeedBot.js</code> from project root.</p>
+            </>
           )}
         </div>
       </div>

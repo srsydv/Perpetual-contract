@@ -36,11 +36,19 @@ export const usePerpetual = () => {
     ? getERC20(COLLATERAL_TOKEN_ADDRESS, provider)
     : null;
 
+  const PRICE_FETCH_TIMEOUT_MS = 12000;
+  const STALE_PRICE_ERROR_SELECTOR = '0x19abf40e'; // StalePrice() from contract
+
   const fetchMarkPrice = useCallback(async () => {
     if (!contract) return;
     try {
       setPriceLoadError(null);
-      const price = await contract.getMarkPrice();
+      const price = await Promise.race([
+        contract.getMarkPrice(),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('timeout')), PRICE_FETCH_TIMEOUT_MS)
+        ),
+      ]);
       const priceStr = formatUnits(price, 8);
       const priceNum = Number(priceStr);
       setMarkPrice(priceStr);
@@ -48,10 +56,26 @@ export const usePerpetual = () => {
         const next = [...prev, { time: Date.now(), price: priceNum }];
         return next.length > MAX_PRICE_POINTS ? next.slice(-MAX_PRICE_POINTS) : next;
       });
+      sessionStorage.removeItem('priceErrorLogged');
     } catch (error: any) {
-      console.error('Error fetching mark price:', error);
-      const msg = error?.reason || error?.message || '';
-      setPriceLoadError(msg.includes('StalePrice') ? 'stale' : 'error');
+      const data = error?.data ?? error?.info?.error?.data ?? '';
+      const msg = String(error?.reason ?? error?.message ?? error?.code ?? '');
+      const isStale =
+        data === STALE_PRICE_ERROR_SELECTOR ||
+        /StalePrice|0x19abf40e/i.test(String(data)) ||
+        /stale|revert|timeout/i.test(msg);
+      setPriceLoadError(isStale ? 'stale' : 'error');
+      setMarkPrice('0');
+      // Log only once per session for same error to avoid flooding console (2081+ errors)
+      if (!sessionStorage.getItem('priceErrorLogged')) {
+        sessionStorage.setItem('priceErrorLogged', '1');
+        console.warn(
+          isStale
+            ? 'Price feed stale: keep node scripts/priceFeedBot.js running from project root (same feed as contract).'
+            : 'Error fetching mark price:',
+          error
+        );
+      }
     }
   }, [contract]);
 
@@ -95,12 +119,13 @@ export const usePerpetual = () => {
   }, [collateralToken, account]);
 
   useEffect(() => {
-    if (contract) {
-      fetchMarkPrice();
-      const interval = setInterval(fetchMarkPrice, 3000); // 3s for live chart + trading
-      return () => clearInterval(interval);
-    }
-  }, [contract, fetchMarkPrice]);
+    if (!contract) return;
+    fetchMarkPrice();
+    // When price is stale, poll every 30s to avoid hammering the node and flooding console
+    const intervalMs = priceLoadError === 'stale' ? 30000 : 3000;
+    const interval = setInterval(fetchMarkPrice, intervalMs);
+    return () => clearInterval(interval);
+  }, [contract, fetchMarkPrice, priceLoadError]);
 
   useEffect(() => {
     if (account) {
@@ -137,18 +162,72 @@ export const usePerpetual = () => {
     }
   };
 
-  const openPosition = async (isLong: boolean, sizeAbs: string, marginAmount: string) => {
-    if (!contract || !signer) throw new Error('Wallet not connected');
+  /** Normalize to human COLL; values >= 1e15 are treated as wei. */
+  const toHumanMargin = (val: string | number): number => {
+    const n = typeof val === 'string' ? Number(val) : val;
+    if (!Number.isFinite(n)) return 0;
+    if (n >= 1e15) return n / 1e18; // wei -> human
+    return n;
+  };
+
+  const PRICE_DECIMALS = 8n;
+  const MAX_LEVERAGE = 20n;
+
+  const openPosition = async (isLong: boolean, sizeAbs: string, marginAmount: string, leverage: number) => {
+    if (!contract || !signer || !account) throw new Error('Wallet not connected');
     setLoading(true);
     try {
-      // Check and approve if needed
-      const allowance = await checkAllowance();
-      if (Number(allowance) < Number(marginAmount)) {
-        toast.loading('Approving tokens...');
-        await approveCollateral(marginAmount);
+      const userMarginNum = toHumanMargin(marginAmount);
+      const sizeWei = parseEther(sizeAbs);
+
+      // Re-fetch required margin at send time (tests use fixed mock price; live price can move)
+      const fresh = await calculateRequiredMargin(sizeAbs, leverage);
+      const freshRequired = fresh ? toHumanMargin(fresh.requiredMargin) : 0;
+      // Use 1.5x buffer so price move between read and tx doesn't cause ExceedsMaxLeverage
+      const safeMarginNewOnly = freshRequired > 0
+        ? Math.max(userMarginNum * 1.15, freshRequired * 1.5)
+        : userMarginNum * 1.15;
+      const safeMarginHuman = safeMarginNewOnly >= 1e15 ? safeMarginNewOnly / 1e18 : safeMarginNewOnly;
+      let marginWithBuffer = safeMarginHuman.toFixed(6);
+
+      // If user has an existing position in the same direction, contract checks COMBINED position
+      const [pos, price] = await Promise.all([
+        contract.getPosition(account),
+        contract.getMarkPrice(),
+      ]);
+      const existingSize = pos[0];
+      const entryPrice = pos[1];
+      const existingMarginWei = pos[2];
+      const sameDirection =
+        (isLong && existingSize > 0n) || (!isLong && existingSize < 0n);
+      if (sameDirection && existingSize !== 0n) {
+        const currentSizeAbs = existingSize < 0n ? -existingSize : existingSize;
+        const currentNotional = (currentSizeAbs * entryPrice) / (10n ** PRICE_DECIMALS);
+        const newNotional = (sizeWei * price) / (10n ** PRICE_DECIMALS);
+        const totalNotional = currentNotional + newNotional;
+        const requiredTotalMarginWei = totalNotional / MAX_LEVERAGE;
+        const marginToAddWei = requiredTotalMarginWei > existingMarginWei
+          ? requiredTotalMarginWei - existingMarginWei
+          : 0n;
+        if (marginToAddWei > 0n) {
+          const marginToAddWithBuffer = (marginToAddWei * 120n) / 100n;
+          const marginFromBuffer = parseEther(marginWithBuffer);
+          const marginWeiRequired = marginToAddWithBuffer > marginFromBuffer
+            ? marginToAddWithBuffer
+            : marginFromBuffer;
+          marginWithBuffer = formatEther(marginWeiRequired);
+        }
       }
 
-      const tx = await contract.openPosition(isLong, parseEther(sizeAbs), parseEther(marginAmount));
+      const marginWei = parseEther(marginWithBuffer);
+
+      const allowance = await checkAllowance();
+      if (Number(allowance) < Number(marginWithBuffer)) {
+        toast.loading('Approving tokens...');
+        await approveCollateral(marginWithBuffer);
+      }
+
+      const tx = await contract.openPosition(isLong, sizeWei, marginWei);
       toast.loading('Opening position...');
       await tx.wait();
       toast.success('Position opened successfully!');
@@ -156,7 +235,14 @@ export const usePerpetual = () => {
       await fetchCollateralBalance();
       return tx;
     } catch (error: any) {
-      toast.error(error.reason || 'Failed to open position');
+      const data = error?.data ?? error?.info?.error?.data;
+      const msg = error?.reason ?? error?.message ?? '';
+      const isExceedsLeverage = data === '0x6979bd5a' || /ExceedsMaxLeverage|6979bd5a/i.test(msg || String(data));
+      if (isExceedsLeverage) {
+        toast.error('Margin too low: price may have moved. Use at least Required margin (we add 15% when sending). Try again or reduce size.');
+      } else {
+        toast.error(error.reason || 'Failed to open position');
+      }
       throw error;
     } finally {
       setLoading(false);
@@ -246,13 +332,13 @@ export const usePerpetual = () => {
   const calculateRequiredMargin = async (sizeAbs: string, leverage: number) => {
     if (!contract) return null;
     try {
-      const [requiredMargin, notional] = await contract.calculateRequiredMargin(
+      const [requiredMarginRaw, notionalRaw] = await contract.calculateRequiredMargin(
         parseEther(sizeAbs),
         leverage
       );
       return {
-        requiredMargin: formatEther(requiredMargin),
-        notional: formatEther(notional),
+        requiredMargin: formatEther(requiredMarginRaw),
+        notional: formatEther(notionalRaw),
       };
     } catch (error) {
       console.error('Error calculating required margin:', error);
@@ -264,6 +350,7 @@ export const usePerpetual = () => {
     markPrice,
     priceHistory,
     priceLoadError,
+    hasContract: !!contract,
     position,
     marginRatio,
     isLiquidatable,

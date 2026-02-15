@@ -16,8 +16,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={dmSans.variable}>
-      <body className="font-sans">
+    <html lang="en" className={dmSans.variable} suppressHydrationWarning>
+      <body className="font-sans" suppressHydrationWarning>
         {children}
         <Toaster position="top-right" toastOptions={{ duration: 4000 }} />
       </body>

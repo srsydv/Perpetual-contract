@@ -58,9 +58,9 @@ Go to http://localhost:3000
 ## Contract Integration
 
 The frontend is fully integrated with your deployed contracts:
-- **PerpetualExchange**: `0xE296570898A8b41b51Efd6B243A04340551AC182`
-- **Collateral Token**: `0x8702ee970b1175B9E4D1B992c853F4dF3341B5E6`
-- **Chainlink Feed**: `0x694AA1769357215DE4FAC081bf1f309aDC325306`
+- **PerpetualExchange (proxy)**: `0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330`
+- **Collateral Token**: `0x799a5570318c0C5Fcfd09b0f573335B5aa8d85Ff`
+- **Price Feed (mock, used by proxy)**: `0x8Ce022D3901FCc9C3944E00c612Dc5c5C7F7683F`
 
 ## Testing
 

@@ -27,14 +27,15 @@ npm install
 cp .env.local.example .env.local
 ```
 
-Edit `.env.local` with your contract addresses:
+Edit `.env.local` (or copy from `.env.local.example`). Use the same addresses as repo README lines 9–12:
 ```env
-NEXT_PUBLIC_CONTRACT_ADDRESS=0xE296570898A8b41b51Efd6B243A04340551AC182
-NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS=0x8702ee970b1175B9E4D1B992c853F4dF3341B5E6
-NEXT_PUBLIC_CHAINLINK_FEED=0x694AA1769357215DE4FAC081bf1f309aDC325306
+NEXT_PUBLIC_CONTRACT_ADDRESS=0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330
+NEXT_PUBLIC_COLLATERAL_TOKEN_ADDRESS=0x799a5570318c0C5Fcfd09b0f573335B5aa8d85Ff
+NEXT_PUBLIC_PRICE_FEED=0x8Ce022D3901FCc9C3944E00c612Dc5c5C7F7683F
 NEXT_PUBLIC_NETWORK=sepolia
-NEXT_PUBLIC_RPC_URL=https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY
+NEXT_PUBLIC_RPC_URL=https://rpc.sepolia.org
 ```
+Price is read from the contract’s `getMarkPrice()` (proxy uses mock feed above). If you see “Stale price”, run `node scripts/updateMockPrice.js` or the price feed bot so the mock is updated within the last hour.
 
 3. **Run development server:**
 ```bash

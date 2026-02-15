@@ -1,177 +1,104 @@
-
-const hre = require("hardhat");
+/**
+ * Bot: fetches ETH/USD from API and updates MockAggregatorV3.
+ * Uses explicit nonce and waits for each tx to be confirmed to avoid RPC "in-flight limit".
+ *
+ * Run from project root: node scripts/priceFeedBot.js
+ * .env: PRIVATE_KEY, SEPOLIA_RPC_URL (optional), MOCK_PRICE_FEED_ADDRESS (optional)
+ */
+const path = require("path");
+require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const { ethers } = require("ethers");
-const https = require("https");
-const http = require("http");
 
-const BOT_FEED_ADDRESS = process.env.BOT_FEED_ADDRESS || "";
-const PRICE_API = (process.env.PRICE_API || "coingecko").toLowerCase();
-const API_KEY = process.env.API_KEY || "";
-const RPC_URL = process.env.RPC_URL || "http://127.0.0.1:8545";
-const INTERVAL_MS = parseInt(process.env.INTERVAL_MS || "60000", 10);
-const MIN_PRICE_CHANGE = parseFloat(process.env.MIN_PRICE_CHANGE || "0.1");
-const CHAINLINK_ETH_FEED = process.env.CHAINLINK_ETH_FEED || "";
+const MOCK_FEED_ADDRESS = process.env.MOCK_PRICE_FEED_ADDRESS || "0x8Ce022D3901FCc9C3944E00c612Dc5c5C7F7683F";
+const EXCHANGE_PROXY = process.env.PERPETUAL_EXCHANGE_PROXY || "0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330";
+const RPC_URL = process.env.SEPOLIA_RPC_URL || process.env.RPC_URL || "https://rpc.sepolia.org";
+const INTERVAL_MS = 15000; // one update per block on Sepolia (~12s) + buffer
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-let lastPrice = null;
+const MOCK_ABI = [
+  "function updateAnswer(int256 newAnswer) external",
+  "function latestRoundData() external view returns (uint80, int256, uint256, uint256, uint80)",
+];
+const EXCHANGE_ABI = ["function priceFeed() external view returns (address)"];
 
-async function fetchCoinGecko() {
-  return new Promise((resolve, reject) => {
-    const url = "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd";
-    https.get(url, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          const price = json.ethereum?.usd;
-          if (!price) reject(new Error("No price in CoinGecko response"));
-          else resolve(price);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    }).on("error", reject);
-  });
-}
-
-async function fetchBinance() {
-  return new Promise((resolve, reject) => {
-    const url = "https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT";
-    https.get(url, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          const price = parseFloat(json.price);
-          if (!price) reject(new Error("No price in Binance response"));
-          else resolve(price);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    }).on("error", reject);
-  });
-}
-
-async function fetchCoinMarketCap() {
-  if (!API_KEY) throw new Error("API_KEY required for CoinMarketCap");
-  return new Promise((resolve, reject) => {
-    const url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest?symbol=ETH&convert=USD";
-    https.get(url, { headers: { "X-CMC_PRO_API_KEY": API_KEY } }, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          const price = json.data?.ETH?.quote?.USD?.price;
-          if (!price) reject(new Error("No price in CoinMarketCap response"));
-          else resolve(price);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    }).on("error", reject);
-  });
-}
-
-async function fetchCryptoCompare() {
-  const apiKey = API_KEY || "demo"; 
-  return new Promise((resolve, reject) => {
-    const url = `https://min-api.cryptocompare.com/data/price?fsym=ETH&tsyms=USD&api_key=${apiKey}`;
-    https.get(url, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        try {
-          const json = JSON.parse(data);
-          const price = json.USD;
-          if (!price) reject(new Error("No price in CryptoCompare response"));
-          else resolve(price);
-        } catch (e) {
-          reject(e);
-        }
-      });
-    }).on("error", reject);
-  });
-}
-
-async function fetchChainlink(provider) {
-  if (!CHAINLINK_ETH_FEED) throw new Error("CHAINLINK_ETH_FEED required for Chainlink API");
-  const AGGREGATOR_ABI = [
-    "function latestRoundData() view returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound)",
+async function getEthUsdPrice() {
+  const urls = [
+    "https://api.binance.com/api/v3/ticker/price?symbol=ETHUSDT",
+    "https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd",
   ];
-  const feed = new ethers.Contract(CHAINLINK_ETH_FEED, AGGREGATOR_ABI, provider);
-  const { answer } = await feed.latestRoundData();
-  return Number(answer) / 1e8;
-}
-
-async function fetchEthPrice(provider) {
-  switch (PRICE_API) {
-    case "coingecko":
-      return await fetchCoinGecko();
-    case "binance":
-      return await fetchBinance();
-    case "coinmarketcap":
-      return await fetchCoinMarketCap();
-    case "cryptocompare":
-      return await fetchCryptoCompare();
-    case "chainlink":
-      return await fetchChainlink(provider);
-    default:
-      throw new Error(`Unknown API: ${PRICE_API}. Use: coingecko, binance, coinmarketcap, cryptocompare, chainlink`);
+  for (const url of urls) {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) continue;
+      const data = await res.json();
+      const price = url.includes("binance") ? Number(data.price) : Number(data.ethereum?.usd ?? data.ethereum);
+      if (price > 0 && Number.isFinite(price)) return price;
+    } catch (e) {
+      continue;
+    }
   }
+  throw new Error("Could not fetch ETH/USD from any API");
 }
 
 async function main() {
-  if (!BOT_FEED_ADDRESS) {
-    console.error("Set BOT_FEED_ADDRESS");
+  const pk = process.env.PRIVATE_KEY || process.env.PK;
+  if (!pk) {
+    console.error("Missing PRIVATE_KEY or PK in .env (project root)");
     process.exit(1);
   }
-
   const provider = new ethers.JsonRpcProvider(RPC_URL);
-  const signer = process.env.PRIVATE_KEY
-    ? new ethers.Wallet(process.env.PRIVATE_KEY, provider)
-    : (await hre.ethers.getSigners())[0];
+  const wallet = new ethers.Wallet(pk.startsWith("0x") ? pk : `0x${pk}`, provider);
+  const mock = new ethers.Contract(MOCK_FEED_ADDRESS, MOCK_ABI, wallet);
 
-  const BotFeed = await hre.ethers.getContractFactory("BotUpdatablePriceFeed");
-  const botFeed = BotFeed.attach(BOT_FEED_ADDRESS).connect(signer);
+  console.log("Price feed bot started");
+  console.log("  Mock feed (we update this):", MOCK_FEED_ADDRESS);
+  console.log("  RPC:                      ", RPC_URL.replace(/\/\/[^@]+@/, "//***@"));
+  console.log("  Wallet:                   ", wallet.address);
+  console.log("  Interval:                 ", INTERVAL_MS / 1000, "sec (after each tx confirmed)");
 
-  console.log("Price Feed Bot: Fetching ETH price from API and updating BotUpdatablePriceFeed");
-  console.log("  API:", PRICE_API);
-  console.log("  Bot feed:", BOT_FEED_ADDRESS);
-  console.log("  Updater:", await signer.getAddress());
-  console.log("  Interval:", INTERVAL_MS, "ms");
-  console.log("  Min price change:", MIN_PRICE_CHANGE + "%\n");
-
-  async function update() {
-    try {
-      const priceUsd = await fetchEthPrice(provider);
-      const priceIn8Decimals = BigInt(Math.round(priceUsd * 1e8));
-
-      // Check if price changed significantly
-      if (lastPrice !== null) {
-        const changePercent = Math.abs((priceUsd - lastPrice) / lastPrice) * 100;
-        if (changePercent < MIN_PRICE_CHANGE) {
-          console.log(new Date().toISOString(), `Price unchanged: $${priceUsd.toFixed(2)} (${changePercent.toFixed(3)}% change, min ${MIN_PRICE_CHANGE}%)`);
-          return;
-        }
-      }
-
-      const tx = await botFeed.updatePrice(priceIn8Decimals);
-      await tx.wait();
-      lastPrice = priceUsd;
-      console.log(new Date().toISOString(), `✅ Updated dummy token price = $${priceUsd.toFixed(2)} USD (from ${PRICE_API})`);
-    } catch (e) {
-      console.error(new Date().toISOString(), "❌ Update failed:", e.message);
+  // Verify exchange proxy uses this mock so app stops reverting with StalePrice
+  try {
+    const exchange = new ethers.Contract(EXCHANGE_PROXY, EXCHANGE_ABI, provider);
+    const feedUsedByExchange = await exchange.priceFeed();
+    const match = feedUsedByExchange.toLowerCase() === MOCK_FEED_ADDRESS.toLowerCase();
+    if (!match) {
+      console.warn("  WARNING: Exchange proxy", EXCHANGE_PROXY, "uses feed", feedUsedByExchange, "but we update", MOCK_FEED_ADDRESS);
+      console.warn("  Set MOCK_PRICE_FEED_ADDRESS=" + feedUsedByExchange + " in .env so the app gets updates.");
+    } else {
+      console.log("  Exchange proxy uses this feed: OK");
     }
+    const [, , , updatedAt] = await mock.latestRoundData();
+    const ageSec = Math.floor(Date.now() / 1000) - Number(updatedAt);
+    if (ageSec > 3600) console.warn("  Mock last updated", Math.floor(ageSec / 60), "min ago (stale). First update in", INTERVAL_MS / 1000, "s.");
+    else console.log("  Mock last updated", Math.floor(ageSec / 60), "min ago");
+  } catch (e) {
+    console.warn("  Could not verify exchange feed:", e.message);
   }
+  console.log("");
 
-  await update();
-  setInterval(update, INTERVAL_MS);
+  for (;;) {
+    try {
+      const priceUsd = await getEthUsdPrice();
+      const price8 = BigInt(Math.round(priceUsd * 1e8));
+      // Use confirmed nonce so we never stack; RPC in-flight limit is not hit
+      const nonce = await provider.getTransactionCount(wallet.address, "confirmed");
+      const tx = await mock.updateAnswer(price8, { nonce });
+      const receipt = await tx.wait();
+      if (receipt && receipt.status === 0) {
+        console.error("[", new Date().toISOString(), "] Tx reverted:", tx.hash);
+      } else {
+        const ts = new Date().toISOString();
+        console.log(`[${ts}] Updated: $${priceUsd.toFixed(2)} (tx: ${tx.hash})`);
+      }
+    } catch (e) {
+      console.error("[", new Date().toISOString(), "] Error:", e.message || e);
+      await sleep(5000); // back off on error before retry
+    }
+    await sleep(INTERVAL_MS);
+  }
 }
 
-main().catch((err) => {
-  console.error(err);
+main().catch((e) => {
+  console.error(e);
   process.exit(1);
 });
