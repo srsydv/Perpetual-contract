@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { getPerpetualExchange, getERC20 } from '@/lib/contracts';
+import { getPerpetualExchange, getERC20, getMockPriceFeed } from '@/lib/contracts';
 import { formatEther, parseEther, formatUnits } from 'ethers';
 import { useWallet } from './useWallet';
 import { CONFIG } from '@/lib/config';
@@ -53,23 +53,51 @@ export const usePerpetual = () => {
       const priceNum = Number(priceStr);
       setMarkPrice(priceStr);
       setPriceHistory((prev) => {
-        // Only add a point when price changed so the chart shows steps (bot updates ~15s), not a flat line
         const last = prev[prev.length - 1];
         if (last != null && last.price === priceNum) return prev;
         const next = [...prev, { time: Date.now(), price: priceNum }];
         return next.length > MAX_PRICE_POINTS ? next.slice(-MAX_PRICE_POINTS) : next;
       });
       sessionStorage.removeItem('priceErrorLogged');
-    } catch (error: any) {
-      const data = error?.data ?? error?.info?.error?.data ?? '';
-      const msg = String(error?.reason ?? error?.message ?? error?.code ?? '');
+    } catch (error: unknown) {
+      const err = error as { data?: string; reason?: string; message?: string; code?: string; info?: { error?: { data?: string } } };
+      const data = err?.data ?? err?.info?.error?.data ?? '';
+      const msg = String(err?.reason ?? err?.message ?? err?.code ?? '');
       const isStale =
         data === STALE_PRICE_ERROR_SELECTOR ||
         /StalePrice|0x19abf40e/i.test(String(data)) ||
         /stale|revert|timeout/i.test(msg);
-      setPriceLoadError(isStale ? 'stale' : 'error');
-      setMarkPrice('0');
-      // Log only once per session for same error to avoid flooding console (2081+ errors)
+
+      // Fallback: when exchange reverts or errors, show last price from mock feed so UI never shows $0 if feed has a value
+      let fallbackPrice: string | null = null;
+      if (provider) {
+        try {
+          const feed = getMockPriceFeed(CONFIG.priceFeedAddress, provider);
+          const round = await feed.latestRoundData();
+          const answer = round.answer;
+          if (answer != null && Number(answer) > 0) {
+            fallbackPrice = formatUnits(BigInt(answer.toString()), 8);
+          }
+        } catch (_) {
+          // ignore
+        }
+      }
+
+      if (fallbackPrice) {
+        setMarkPrice(fallbackPrice);
+        setPriceHistory((prev) => {
+          const priceNum = Number(fallbackPrice!);
+          const last = prev[prev.length - 1];
+          if (last != null && last.price === priceNum) return prev;
+          const next = [...prev, { time: Date.now(), price: priceNum }];
+          return next.length > MAX_PRICE_POINTS ? next.slice(-MAX_PRICE_POINTS) : next;
+        });
+        setPriceLoadError(isStale ? 'stale' : 'error'); // still show warning; trades may revert if exchange considers stale
+      } else {
+        setMarkPrice('0');
+        setPriceLoadError(isStale ? 'stale' : 'error');
+      }
+
       if (!sessionStorage.getItem('priceErrorLogged')) {
         sessionStorage.setItem('priceErrorLogged', '1');
         console.warn(
@@ -80,7 +108,7 @@ export const usePerpetual = () => {
         );
       }
     }
-  }, [contract]);
+  }, [contract, provider]);
 
   const fetchPosition = useCallback(async () => {
     if (!contract || !account) return;

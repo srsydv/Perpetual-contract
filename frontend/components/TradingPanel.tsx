@@ -136,7 +136,13 @@ export default function TradingPanel() {
           <>
             <div className="text-base sm:text-lg font-semibold text-amber-700">
               {priceLoadError === 'stale' ? 'Feed stale' : 'Price unavailable'}
+              {Number(markPrice) > 0 && (
+                <span className="font-bold text-slate-800 tabular-nums ml-2">${Number(markPrice).toFixed(2)}</span>
+              )}
             </div>
+            {Number(markPrice) > 0 && (
+              <p className="text-xs text-slate-600 mt-0.5">Showing last price from mock feed. Trades may revert if &gt;1h old.</p>
+            )}
             <p className="text-xs text-slate-600 mt-1">
               Keep the bot running from project root: <code className="bg-slate-200 px-1 rounded">node scripts/priceFeedBot.js</code>. If it’s already running, check the bot console for “Exchange proxy uses this feed: OK” and that it’s updating the same mock as the contract.
             </p>
