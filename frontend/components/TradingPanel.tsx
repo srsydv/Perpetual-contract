@@ -39,6 +39,7 @@ export default function TradingPanel() {
   const [margin, setMargin] = useState('');
   const [requiredMargin, setRequiredMargin] = useState<string | null>(null);
   const [maxSize, setMaxSize] = useState<string | null>(null);
+  const [bufferedMargin, setBufferedMargin] = useState<string | null>(null);
 
   useEffect(() => {
     if (margin && leverage) {
@@ -63,6 +64,23 @@ export default function TradingPanel() {
       });
     }
   }, [size, leverage, calculateRequiredMargin]);
+
+  // Calculate buffered margin that will actually be sent (same logic as usePerpetual.ts)
+  useEffect(() => {
+    if (margin && size && leverage && requiredMargin) {
+      const userMarginNum = Number(margin);
+      const freshRequired = Number(requiredMargin);
+      
+      // Same buffer calculation as in usePerpetual.ts openPosition()
+      const safeMarginNewOnly = freshRequired > 0
+        ? Math.max(userMarginNum * 1.15, freshRequired * 1.5)
+        : userMarginNum * 1.15;
+      
+      setBufferedMargin(safeMarginNewOnly.toFixed(4));
+    } else {
+      setBufferedMargin(null);
+    }
+  }, [margin, size, leverage, requiredMargin]);
 
   const marginNum = Number(margin);
   const requiredNum = requiredMargin ? Number(requiredMargin) : 0;
@@ -210,6 +228,11 @@ export default function TradingPanel() {
         {requiredMargin && (
           <div className="text-xs text-emerald-600 mt-1">Required: {displayColl(requiredMargin)} COLL</div>
         )}
+        {bufferedMargin && Number(bufferedMargin) > Number(margin) && (
+          <div className="text-xs text-amber-600 mt-1 font-medium">
+            Will send: {Number(bufferedMargin).toFixed(2)} COLL (includes safety buffer)
+          </div>
+        )}
       </div>
 
       {size && markPrice && (
@@ -242,7 +265,7 @@ export default function TradingPanel() {
           <p><strong>Example:</strong> 2 ETH long, 2x leverage, entry $2000. Notional = 2 × $2000 = $4000. Required margin = $4000 ÷ 2 = <strong>2000 COLL</strong>. You lock 2000 COLL.</p>
           <p><strong>If price goes 10% up</strong> (to $2200): PnL = (2200 − 2000) × 2 = <strong>+$400 profit</strong>. Your equity = 2000 + 400 = $2400. You can close and get margin + PnL back.</p>
           <p><strong>Same 2 ETH at 3x:</strong> Required margin = $4000 ÷ 3 ≈ <strong>1333 COLL</strong>. If price +10%, PnL still +$400; equity = 1333 + 400 = $1733. Higher leverage = less margin, same dollar PnL per move.</p>
-          <p className="text-xs text-slate-500">If price drops, PnL is negative; if equity ÷ notional &lt; 5%, position can be liquidated. Always use at least the &quot;Required&quot; margin (we add a buffer when sending).</p>
+          <p className="text-xs text-slate-500">If price drops, PnL is negative; if equity ÷ notional &lt; 5%, position can be liquidated. Always use at least the &quot;Required&quot; margin. Note: We add a safety buffer (up to 1.5x required) when sending to prevent failures from price moves—check &quot;Will send&quot; amount above.</p>
         </div>
       </details>
     </div>
