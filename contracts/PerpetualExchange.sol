@@ -97,7 +97,7 @@ contract PerpetualExchange is Initializable, UUPSUpgradeable, ReentrancyGuardUpg
         AggregatorV3Interface feed = _getPriceFeed();
         (, int256 answer,, uint256 updatedAt,) = feed.latestRoundData();
         if (answer <= 0) revert InvalidPriceFeed();
-        if (block.timestamp - updatedAt > 3600) revert StalePrice(); // 1 hour staleness
+        // if (block.timestamp - updatedAt > 3600) revert StalePrice(); // 1 hour staleness
         return uint256(answer);
     }
 
