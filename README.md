@@ -2,6 +2,17 @@
 
 A decentralized perpetual futures exchange smart contract built on Ethereum, allowing users to trade leveraged positions on ETH/USD with up to 20x leverage.
 
+## 🚀 Latest Deployment (Sepolia Testnet)
+
+| Contract | Address | Explorer |
+|----------|---------|----------|
+| **Proxy (Use This)** | `0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330` | [Etherscan](https://sepolia.etherscan.io/address/0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330) |
+| **Implementation** | `0xEab0ce81ed94f36B10e39E5Af8a10FC58E5Fd974` | [Etherscan](https://sepolia.etherscan.io/address/0xEab0ce81ed94f36B10e39E5Af8a10FC58E5Fd974) |
+| **Price Feed** | `0x8Ce022D3901FCc9C3944E00c612Dc5c5C7F7683F` | [Etherscan](https://sepolia.etherscan.io/address/0x8Ce022D3901FCc9C3944E00c612Dc5c5C7F7683F) |
+| **Collateral Token** | `0x799a5570318c0C5Fcfd09b0f573335B5aa8d85Ff` | [Etherscan](https://sepolia.etherscan.io/address/0x799a5570318c0C5Fcfd09b0f573335B5aa8d85Ff) |
+
+> **Note:** Always use the **Proxy address** (`0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330`) when interacting with the contract.
+
 ## 📋 Table of Contents
 
 - [Overview](#overview)
@@ -395,17 +406,13 @@ perpetualExchange.liquidate(traderAddress);
 
 ## Contract Addresses (Sepolia Testnet)
 
-### Current Deployment
+> **See [Latest Deployment](#-latest-deployment-sepolia-testnet) section at the top for current addresses.**
+
 - **Proxy (use this)**: `0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330`
 - **Implementation**: `0xEab0ce81ed94f36B10e39E5Af8a10FC58E5Fd974`
 - **Price Feed**: `0x8Ce022D3901FCc9C3944E00c612Dc5c5C7F7683F` (MockAggregatorV3)
 - **Collateral Token**: `0x799a5570318c0C5Fcfd09b0f573335B5aa8d85Ff` (MockERC20)
 - **Owner**: `0xf69F75EB0c72171AfF58D79973819B6A3038f39f`
-
-
-
-**View on Etherscan:**
-- Proxy: https://sepolia.etherscan.io/address/0xf1d034E8b0973a3ECE2ecbAC7c62bf7664bAf330
 
 ---
 
